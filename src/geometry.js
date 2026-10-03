@@ -31,10 +31,12 @@ export function angleBetween(a, b) {
 }
 
 // Screen right and up, in world space, for a camera at direction d from its
-// target with world +y as up. Matches Three.js's Object3D.lookAt.
+// target with world +y as up. Matches Three.js's Object3D.lookAt. Orbit
+// controls never look exactly straight down, so even a top-down view keeps a
+// tiny sideways component that fixes which way is right.
 export function screenBasis(d) {
   let right = cross([0, 1, 0], d);
-  right = length(right) < 1e-6 ? [1, 0, 0] : normalize(right);
+  right = length(right) < 1e-12 ? [1, 0, 0] : normalize(right);
   return { right, up: cross(d, right) };
 }
 

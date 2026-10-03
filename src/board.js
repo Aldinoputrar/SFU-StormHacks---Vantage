@@ -35,7 +35,6 @@ const AXES = [
 
 const MIN_FACING = 0.2; // a face must point at least this much toward the camera
 const MIN_STEP = 0.5; // tiles squashed below this on screen are unreadable
-const MAX_ELEVATION = 0.99; // orbit controls cannot look straight up or down
 const MIN_JOINED_LENGTH = 3; // two lone tiles meeting at a corner are not a line
 export const ALIGN_TOLERANCE = (2 * Math.PI) / 180;
 
@@ -138,7 +137,6 @@ function joinDirection(a, b) {
     const dir = scale(d, sign);
     if (dot(a.slot.normal, dir) < MIN_FACING || dot(b.slot.normal, dir) < MIN_FACING) continue;
     if (length(onScreen(a.outward, dir)) < MIN_STEP) continue;
-    if (Math.abs(dir[1]) > MAX_ELEVATION) continue;
     return dir;
   }
   return null;
