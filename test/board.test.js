@@ -85,14 +85,124 @@ test('a word on the loop can wrap past where the loop was declared to start', ()
   assert.equal(result.word, rackTiles);
 });
 
-test('tiles hidden from the locked view are cut out of lines', () => {
+test('a floating ledge does not shorten the rise underneath it', () => {
   // From straight above, the floating ledge at (0, 3, 3) covers the rise's
-  // tile at (0, 0, 3), so the rise's top line splits around it.
+  // tile at (0, 0, 3), but the rise remains a four-tile line.
   const above = normalize([0.001, 1, 0.001]);
   const hidden = slotKey([0, 0, 3], '+y');
   const { bySlot } = chainsForView(board, above, undefined, true);
-  assert.equal(bySlot.get(hidden), undefined);
-  assert.ok(bySlot.get(slotKey([0, 0, 2], '+y')).every((chain) => !chain.slots.includes(hidden)));
+  const rise = bySlot.get(slotKey([0, 0, 2], '+y')).find((chain) => chain.slots.includes(slotKey([0, 0, 1], '+y')));
+  assert.ok([1, 2, 3, 4].every((z) => rise.slots.includes(slotKey([0, 0, z], '+y'))));
+  assert.ok(rise.slots.includes(hidden));
+  assert.ok(rise.hiddenSlots.includes(hidden));
+  assert.ok(bySlot.get(hidden).includes(rise));
+});
+
+function coveredStrip(coveredIndex, coverLength = 1) {
+  const level = {
+    seed: 1, turns: 12, words: [],
+    blocks: [
+      { start: [0, 0, 0], dir: [1, 0, 0], length: 5 },
+      { start: [coveredIndex, 2, 0], dir: [1, 0, 0], length: coverLength },
+    ],
+  };
+  const board = buildBoard(level);
+  const view = chainsForView(board, [0, 1, 0], undefined, true);
+  return { level, board, ...view };
+}
+
+test('covered middle and end tiles stay in their complete selectable row', () => {
+  for (const coveredIndex of [2, 4]) {
+    const { bySlot } = coveredStrip(coveredIndex);
+    const keys = Array.from({ length: 5 }, (_, i) => slotKey([i, 0, 0], '+y'));
+    const row = bySlot.get(keys[0]).find((chain) => chain.slots.length === 5);
+    assert.deepEqual(row.slots, keys);
+    assert.equal(new Set(row.slotLines).size, 1);
+    assert.equal(row.slotLines.length, row.slots.length);
+    assert.deepEqual(row.hiddenSlots, [keys[coveredIndex]]);
+    assert.ok(bySlot.get(keys[coveredIndex]).includes(row));
+    assert.deepEqual(bySlot.get(slotKey([coveredIndex, 2, 0], '+y'))[0].hiddenSlots, []);
+  }
+});
+
+test('a row stays selectable when every tile is partially covered', () => {
+  const partialBoard = buildBoard({ blocks: [
+    { start: [0, 0, 0], dir: [1, 0, 0], length: 5 },
+    { start: [0, 2, 1], dir: [1, 0, 0], length: 5 },
+  ] });
+  const { bySlot } = chainsForView(partialBoard, normalize([0, 1, 0.2]), undefined, true);
+  const row = bySlot.get(slotKey([0, 0, 0], '+y')).find((chain) => chain.slots.length === 5);
+  assert.deepEqual(row.hiddenSlots, row.slots);
+});
+
+test('back faces and completely covered rows cannot be selected', () => {
+  const { chains, bySlot } = coveredStrip(0, 5);
+  for (let i = 0; i < 5; i++) {
+    assert.equal(bySlot.has(slotKey([i, 0, 0], '+y')), false);
+    assert.equal(bySlot.has(slotKey([i, 0, 0], '-y')), false);
+    assert.equal(bySlot.has(slotKey([i, 2, 0], '-y')), false);
+  }
+  assert.ok(chains.length > 0);
+  assert.ok(chains.every((chain) => chain.slots.every((key) => key.endsWith('+y'))));
+});
+
+test('a word can span a covered tile without skipping a position', () => {
+  const { level, board, bySlot } = coveredStrip(2);
+  const game = createGame(level, board);
+  const row = bySlot.get(slotKey([0, 0, 0], '+y')).find((chain) => chain.slots.length === 5);
+  game.rack = ['C', 'A', 'T'];
+  placeTile(game, row.slots[1], 0);
+  placeTile(game, row.slots[3], 1);
+  assert.match(playWord(game, row, [0, 1, 0], anyWord).error, /gaps/);
+  placeTile(game, row.slots[2], 0);
+  const result = playWord(game, row, [0, 1, 0], (word) => word === 'CAT');
+  assert.equal(result.word, 'CAT');
+  assert.equal(game.letters.get(row.slots[2]), 'A');
+  assert.equal(game.turnsLeft, 11);
+});
+
+test('covered interiors allow perspective joins but covered joining endpoints do not', () => {
+  for (const [blockerX, shouldJoin] of [[3, true], [5, false]]) {
+    const joinedBoard = buildBoard({ blocks: [
+      { start: [0, 0, 0], dir: [1, 0, 0], length: 4 },
+      { start: [7, 3, 3], dir: [1, 0, 0], length: 4 },
+      { start: [blockerX, 2, 2], dir: [1, 0, 0], length: 1 },
+    ] });
+    const { chains } = chainsForView(joinedBoard, ISO, undefined, true);
+    const joined = chains.find((chain) =>
+      chain.slots.includes(slotKey([0, 0, 0], '+y')) &&
+      chain.slots.includes(slotKey([10, 3, 3], '+y')),
+    );
+    assert.equal(Boolean(joined), shouldJoin);
+    if (joined) {
+      assert.equal(joined.slots.length, 8);
+      assert.ok(joined.hiddenSlots.includes(slotKey([1, 0, 0], '+y')));
+    }
+  }
+});
+
+test('partial cover preserves loop continuity and wraparound word placement', () => {
+  const level = {
+    seed: 1, turns: 12, words: [],
+    blocks: [
+      { start: [0, 0, 0], dir: [1, 0, 0], length: 2 },
+      { start: [0, 0, 1], dir: [1, 0, 0], length: 2 },
+      { start: [2, 2, 1], dir: [1, 0, 0], length: 1 },
+    ],
+    loops: [{ view: [0, 1, 0], face: '+y', path: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]] }],
+  };
+  const loopBoard = buildBoard(level);
+  const viewDir = normalize([0.3, 1, 0]);
+  const { chains, bySlot } = chainsForView(loopBoard, viewDir, 0.5, true);
+  const loop = chains.find((chain) => chain.cyclic);
+  assert.equal(loop.slots.length, 4);
+  assert.equal(loop.slotLines.length, 4);
+  assert.ok(loop.hiddenSlots.length > 0 && loop.hiddenSlots.length < 4);
+  assert.ok(loop.hiddenSlots.every((key) => bySlot.get(key).includes(loop)));
+  const game = createGame(level, loopBoard);
+  game.rack = ['C', 'A', 'T'];
+  for (const i of [3, 0, 1]) placeTile(game, loop.slots[i], 0);
+  assert.equal(playWord(game, loop, viewDir, (word) => word === 'CAT').word, 'CAT');
 });
 
 test('the dictionary accepts real words and rejects others', () => {

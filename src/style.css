@@ -45,6 +45,15 @@ button:disabled {
   cursor: default;
 }
 
+[hidden] {
+  display: none !important;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 kbd {
   font: inherit;
   font-size: 11px;
@@ -159,18 +168,37 @@ kbd {
   flex-wrap: wrap;
   justify-content: center;
   gap: 3px;
+  pointer-events: auto;
 }
 
-#pattern span {
-  width: 22px;
-  height: 22px;
+#pattern button {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border-radius: 4px;
   border: 1px solid var(--line);
   background: #ece4f0;
   font-size: 13px;
   font-weight: 700;
-  line-height: 22px;
+  line-height: 28px;
   text-align: center;
+}
+
+#pattern .covered::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 5px;
+  right: 5px;
+  border-bottom: 2px dashed currentColor;
+  opacity: 0.65;
+}
+
+#switch-line {
+  pointer-events: auto;
+  font-size: 12px;
+  padding: 4px 10px;
 }
 
 #pattern .letter {

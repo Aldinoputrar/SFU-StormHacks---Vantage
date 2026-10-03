@@ -90,11 +90,16 @@ export class BoardView {
     this.group = new THREE.Group();
     this.tiles = new Map();
     this.pickables = [];
+    this.focusPickables = [];
     this.highlights = new Map();
+    this.ownedGeometries = new Set();
+    this.ownedMaterials = new Set();
 
     const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
     const stone = new THREE.MeshStandardMaterial({ color: COLORS.stone, roughness: 0.95 });
     const turntableStone = new THREE.MeshStandardMaterial({ color: COLORS.turntable, roughness: 0.95 });
+    this.ownedGeometries.add(blockGeometry);
+    this.ownedMaterials.add(stone).add(turntableStone);
     const onTurntable = (cell) => Boolean(turntable?.cells.has(cell.join(',')));
     for (const cell of board.cells) {
       const block = new THREE.Mesh(blockGeometry, onTurntable(cell) ? turntableStone : stone);
@@ -107,8 +112,11 @@ export class BoardView {
 
     // The letter is drawn on the box's +y face, so +y points out of the block.
     const tileGeometry = new THREE.BoxGeometry(TILE_SIZE, 1, TILE_SIZE);
+    this.focusGeometry = new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE);
+    this.ownedGeometries.add(tileGeometry).add(this.focusGeometry);
     for (const slot of board.slots.values()) {
       const face = new THREE.MeshStandardMaterial({ roughness: 0.65 });
+      this.ownedMaterials.add(face);
       const materials = [null, null, face, null, null, null];
       const mesh = new THREE.Mesh(tileGeometry, materials);
       mesh.userData.slot = slot.key;
@@ -126,6 +134,42 @@ export class BoardView {
 
   dispose() {
     this.scene.remove(this.group);
+    for (const geometry of this.ownedGeometries) geometry.dispose();
+    for (const material of this.ownedMaterials) material.dispose();
+    this.ownedGeometries.clear();
+    this.ownedMaterials.clear();
+    this.group.clear();
+    this.tiles.clear();
+    this.pickables = [];
+    this.focusPickables = [];
+    this.spinning = [];
+    this.highlights = new Map();
+  }
+
+  // Keep the complete selected line readable, even beneath another ledge.
+  // Only its tile faces are drawn through blocks; the board stays solid.
+  setFocus(keys) {
+    for (const overlay of this.focusPickables) overlay.visible = false;
+    this.focusPickables = [];
+    for (const key of new Set(keys ?? [])) {
+      const tile = this.tiles.get(key);
+      if (!tile) continue;
+      if (!tile.overlay) {
+        const material = tile.face.clone();
+        material.depthTest = false;
+        material.depthWrite = false;
+        this.ownedMaterials.add(material);
+        const overlay = new THREE.Mesh(this.focusGeometry, material);
+        overlay.rotation.x = -Math.PI / 2;
+        overlay.position.y = 0.501;
+        overlay.renderOrder = 10;
+        overlay.userData.slot = key;
+        tile.mesh.add(overlay);
+        tile.overlay = overlay;
+      }
+      tile.overlay.visible = true;
+      this.focusPickables.push(tile.overlay);
+    }
   }
 
   // Turns the turntable's meshes by angle about the vertical axis through
@@ -148,6 +192,10 @@ export class BoardView {
     tile.letter = letter;
     tile.face.map = faceTexture(style, letter, style === 'empty' ? this.bonuses.get(key) : null);
     tile.face.needsUpdate = true;
+    if (tile.overlay) {
+      tile.overlay.material.map = tile.face.map;
+      tile.overlay.material.needsUpdate = true;
+    }
     for (const i of [0, 1, 3, 4, 5]) tile.materials[i] = sideMaterials[style];
 
     const height = HEIGHT[style];
@@ -160,7 +208,10 @@ export class BoardView {
   setHighlights(highlights) {
     this.highlights = highlights;
     for (const [key, tile] of this.tiles) {
-      if (!highlights.has(key)) tile.face.emissiveIntensity = 0;
+      if (!highlights.has(key)) {
+        tile.face.emissiveIntensity = 0;
+        if (tile.overlay) tile.overlay.material.emissiveIntensity = 0;
+      }
     }
   }
 
@@ -197,6 +248,8 @@ export class BoardView {
 
   // The slot under the ray, whether it hits the tile or the block around it.
   pick(raycaster) {
+    const focusedHit = raycaster.intersectObjects(this.focusPickables, false)[0];
+    if (focusedHit) return focusedHit.object.userData.slot;
     const hit = raycaster.intersectObjects(this.pickables, false)[0];
     if (!hit) return null;
     if (hit.object.userData.slot) return hit.object.userData.slot;
@@ -207,9 +260,14 @@ export class BoardView {
   animate(time) {
     for (const [key, kind] of this.highlights) {
       const glow = GLOW[kind];
-      const face = this.tiles.get(key).face;
+      const tile = this.tiles.get(key);
+      const face = tile.face;
       face.emissive.copy(glow.color);
       face.emissiveIntensity = glow.base + glow.pulse * Math.sin(time * glow.speed);
+      if (tile.overlay) {
+        tile.overlay.material.emissive.copy(face.emissive);
+        tile.overlay.material.emissiveIntensity = face.emissiveIntensity;
+      }
     }
   }
 }

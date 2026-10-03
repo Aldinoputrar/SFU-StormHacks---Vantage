@@ -33,7 +33,10 @@ const game = createGame(BROKEN_CUBE, board);
 // The word list is large, so it loads in the background while players explore.
 let isWord = null;
 fetch(wordsUrl)
-  .then((response) => response.text())
+  .then((response) => {
+    if (!response.ok) throw new Error(`Dictionary request failed: ${response.status}`);
+    return response.text();
+  })
   .then((text) => (isWord = createDictionary(text)))
   .catch(() => setMessage('Could not load the dictionary. Check your connection and reload.', 'error'));
 
@@ -92,7 +95,7 @@ controls.maxZoom = 4;
 camera.position.copy(target).add(new THREE.Vector3(1, 0.6, 0.3).setLength(40));
 controls.update();
 
-const viewDir = () => camera.position.clone().sub(target).normalize().toArray();
+const viewDir = () => camera.position.clone().sub(controls.target).normalize().toArray();
 
 let mode = 'explore'; // 'explore' | 'placing' | 'over'
 let current = chainsForView(board, viewDir()); // every line, as seen from the camera
@@ -103,15 +106,20 @@ let revealing = false; // showing how far apart joined strips really are
 let turning = null; // turntable animation in progress
 let message = null;
 let messageTimer;
+const isBusy = () => Boolean(snap || revealing || turning);
 
 const hud = createHud({
   onRack: placeFromRack,
   onPlay: play,
   onUndo: undo,
   onCancel: exitPlacing,
-  onIso: () => mode === 'explore' && !snap && !revealing && animateTo(ISOMETRIC),
+  onIso: () => mode === 'explore' && !isBusy() && animateTo(ISOMETRIC),
   onReveal: reveal,
   onTurn: turn,
+  onPattern: selectPatternSlot,
+  onSwitchLine: () => {
+    if (selection && !game.pending.length && !isBusy()) selectSlot(selection.clicked, true);
+  },
 });
 
 // Dashed lines across each hidden gap, drawn while revealing.
@@ -148,6 +156,7 @@ function refresh() {
     if (cursor) highlights.set(cursor, 'cursor');
   }
   view.setHighlights(highlights);
+  view.setFocus(selection?.chain.slots ?? []);
   renderHud();
 }
 
@@ -161,7 +170,8 @@ function renderHud() {
     hint = 'The dashed lines show how far apart the joined strips really are';
   } else if (mode === 'over') {
     headline = `Run complete: ${game.score} points`;
-    hint = `You played ${game.history.length} words. Orbit around to admire them.`;
+    const words = game.history.filter((move) => move.type === 'word').length;
+    hint = `You played ${words} word${words === 1 ? '' : 's'}. Orbit around to admire them.`;
   } else if (mode === 'placing' && selection) {
     const { chain } = selection;
     const surfaces = new Set(chain.slotLines).size;
@@ -176,7 +186,11 @@ function renderHud() {
       cursor: i === selection.cursor,
       joint: i > 0 && chain.slotLines[i] !== chain.slotLines[i - 1],
       bonus: !letterAt(game, key) ? (bonuses.get(key) ?? null) : null,
+      covered: chain.hiddenSlots?.includes(key) ?? false,
     }));
+    if (chain.hiddenSlots?.length) {
+      hint = 'The full row stays playable under other blocks. Click a square above to place there.';
+    }
     const reachable = chain.slots.filter((key) => !game.letters.has(key) && bonuses.has(key));
     if (reachable.length) {
       headline += ` · ${reachable.map((key) => bonuses.get(key)).join(', ')} in reach`;
@@ -198,16 +212,22 @@ function renderHud() {
     }
   }
 
-  const busy = revealing || snap || turning;
-  const canReveal = !busy && current.chains.some(isJoined);
+  const busy = isBusy();
+  const canReveal = !busy && mode !== 'placing' && current.chains.some(isJoined);
   const canTurn = !busy && mode === 'explore';
-  hud.render({ game, placing: mode === 'placing', canReveal, canTurn, headline, hint, pattern, message });
+  const canSwitch = mode === 'placing' && selection && lineOptions(selection.clicked).length > 1;
+  hud.render({
+    game, placing: mode === 'placing', busy, canPlace: mode === 'placing' && Boolean(selection) && !busy,
+    canIso: !busy && mode === 'explore', canReveal, canTurn, canSwitch,
+    headline, hint, pattern, message,
+  });
 }
 
 // Swings the camera around the target to look from dir.
 function animateTo(dir, then) {
-  const offset = camera.position.clone().sub(target);
+  const offset = camera.position.clone().sub(controls.target);
   snap = {
+    target: controls.target.clone(),
     from: offset.clone().normalize(),
     to: new THREE.Vector3(...dir).normalize(),
     distance: offset.length(),
@@ -215,6 +235,7 @@ function animateTo(dir, then) {
     then,
   };
   controls.enabled = false;
+  renderHud();
 }
 
 function stepSnap(now) {
@@ -222,12 +243,12 @@ function stepSnap(now) {
   const eased = 1 - (1 - t) ** 3;
   const turn = new THREE.Quaternion().setFromUnitVectors(snap.from, snap.to);
   const dir = snap.from.clone().applyQuaternion(new THREE.Quaternion().slerp(turn, eased));
-  camera.position.copy(target).addScaledVector(dir, snap.distance);
+  camera.position.copy(snap.target).addScaledVector(dir, snap.distance);
   controls.update();
   if (t === 1) {
     const { then } = snap;
     snap = null;
-    controls.enabled = mode !== 'placing' && !revealing;
+    controls.enabled = mode !== 'placing' && !revealing && !turning;
     then?.();
   }
   refresh();
@@ -253,7 +274,7 @@ controls.addEventListener('end', () => {
 // across every hidden gap, so the player sees the strips come apart.
 function reveal() {
   const joined = current.chains.filter(isJoined);
-  if (snap || revealing || !joined.length) return;
+  if (isBusy() || mode === 'placing' || !joined.length) return;
   revealing = true;
   for (const chain of joined) drawGhosts(chain);
   const home = viewDir();
@@ -263,6 +284,7 @@ function reveal() {
       () =>
         animateTo(home, () => {
           revealing = false;
+          for (const ghost of ghosts.children) ghost.geometry.dispose();
           ghosts.clear();
           controls.enabled = mode !== 'placing';
           refresh();
@@ -302,12 +324,15 @@ function stepTurn(now) {
   view.spinTurntable((Math.PI / 2) * (1 - (1 - t) ** 3));
   if (t < 1) return;
   turning = null;
-  turnTurntable(game, board);
+  const turned = turnTurntable(game, board);
   board = buildBoard(currentLevel(game));
   drawBoard();
   mode = game.turnsLeft > 0 ? 'explore' : 'over';
   controls.enabled = true;
-  setMessage('The turntable turned. New lines may line up now.', 'success');
+  setMessage(
+    turned ? 'The turntable turned. New lines may line up now.' : 'The ledge cannot turn here without covering a letter or hitting another block.',
+    turned ? 'success' : 'error',
+  );
   refresh();
 }
 
@@ -325,7 +350,7 @@ function lockView(key) {
 }
 
 function exitPlacing() {
-  if (mode !== 'placing') return;
+  if (mode !== 'placing' || isBusy()) return;
   for (const key of cancelPending(game)) view.setTile(key, '', 'empty');
   selection = null;
   lockedDir = null;
@@ -336,10 +361,14 @@ function exitPlacing() {
 
 // Picks a line through the slot: a joined one if there is one, then the
 // longest. Choosing the same slot again switches to its other line.
-function selectSlot(key, toggle = false) {
-  const options = (current.bySlot.get(key) ?? [])
+function lineOptions(key) {
+  return (current.bySlot.get(key) ?? [])
     .filter((chain) => chain.slots.length >= 2)
     .sort((a, b) => isJoined(b) - isJoined(a) || b.slots.length - a.slots.length);
+}
+
+function selectSlot(key, toggle = false) {
+  const options = lineOptions(key);
   if (!options.length) {
     setMessage('No line runs through that tile from here.', 'error');
     return;
@@ -347,6 +376,13 @@ function selectSlot(key, toggle = false) {
   const chain = toggle && selection ? options[(options.indexOf(selection.chain) + 1) % options.length] : options[0];
   selection = { chain, cursor: 0, clicked: key };
   selection.cursor = cursorFrom(chain.slots.indexOf(key));
+  refresh();
+}
+
+function selectPatternSlot(index) {
+  if (mode !== 'placing' || !selection || isBusy()) return;
+  if (!Number.isInteger(index) || index < 0 || index >= selection.chain.slots.length) return;
+  selection.cursor = cursorFrom(index);
   refresh();
 }
 
@@ -371,7 +407,7 @@ function nextEmpty(from) {
 }
 
 function placeFromRack(index) {
-  if (mode === 'over') return;
+  if (mode === 'over' || isBusy()) return;
   if (mode !== 'placing' || !selection) {
     setMessage('Click a tile first to choose where your word goes.', 'error');
     return;
@@ -383,7 +419,7 @@ function placeFromRack(index) {
   }
   const key = selection.chain.slots[at];
   const letter = game.rack[index];
-  placeTile(game, key, index);
+  if (!placeTile(game, key, index)) return;
   view.setTile(key, letter, 'pending');
   const next = nextEmpty(at + 1);
   selection.cursor = next === -1 ? selection.chain.slots.length : next;
@@ -397,6 +433,7 @@ function typeLetter(letter) {
 }
 
 function undo() {
+  if (mode !== 'placing' || isBusy()) return;
   const key = undoTile(game);
   if (!key) return;
   view.setTile(key, '', 'empty');
@@ -405,7 +442,7 @@ function undo() {
 }
 
 function play() {
-  if (mode !== 'placing' || !selection) return;
+  if (mode !== 'placing' || !selection || isBusy()) return;
   if (!isWord) {
     setMessage('Still loading the dictionary…', 'error');
     return;
@@ -464,6 +501,13 @@ renderer.domElement.addEventListener('pointerup', (event) => {
 
 window.addEventListener('keydown', (event) => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.target.matches?.('input, textarea, select, [contenteditable="true"]')) return;
+  // Enter still submits after clicking the word strip or rack; other buttons
+  // retain native keyboard activation, and Space always activates a button.
+  if (event.target.closest?.('button')) {
+    if (event.key === ' ') return;
+    if (event.key === 'Enter' && (!game.pending.length || !event.target.closest('#pattern, #rack'))) return;
+  }
   if (/^[a-z]$/i.test(event.key)) typeLetter(event.key.toUpperCase());
   else if (event.key === 'Enter') play();
   else if (event.key === 'Backspace') undo();

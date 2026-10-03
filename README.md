@@ -94,7 +94,7 @@ Take a strip A whose next tile would sit at **N** (one step past its end, steppi
 Both differences must point along **d**, which fixes the viewpoint up to sign; the sign is chosen so both faces point at the camera. The game solves this for every pair of strip ends when a level loads ([`src/board.js`](src/board.js)), then:
 
 - keeps only the cube's 26 symmetry directions (towards its faces, edges and corners), like Monument Valley's fixed views; any two parallel strips line up from *some* angle, so this keeps vantage points special,
-- drops joins where another block hides a tile, by stepping a ray through the voxel grid from each tile towards the camera ([`src/geometry.js`](src/geometry.js)),
+- drops joins where another block hides either joining endpoint, by stepping a ray through the voxel grid towards the camera ([`src/geometry.js`](src/geometry.js)); covered tiles inside a row remain part of that row,
 - snaps the camera to a vantage point when you let go within 10° of it.
 
 Run `npm run vantages` to list every vantage point in a level and the strips that join there.
@@ -124,6 +124,7 @@ npm run vantages  # list the vantage points in the level
 
 - **Drag** to orbit, **scroll** to zoom. Let go near a vantage point and the camera snaps to it; joined lines glow.
 - **Click a tile** to lock the view and pick the line through it. Click the same tile again to switch to the other line through it.
+- **Covered squares stay in the row.** Selecting a row shows its full length through any blocks above it. Click a square in the word strip to choose where to type; dashed marks identify covered squares. Use **Switch line** to choose another row through the selected tile before placing letters.
 - **Type** letters (or tap your rack) to place them along the line, **Backspace** to undo, **Enter** to play, **Esc** to cancel.
 - **Reveal the trick** shows the real 3D gaps behind the lines joined at the current vantage point.
 - **Turn the ledge** spends a turn rotating the blue ledge a quarter turn about its first block. Letters on it turn with it, and the lines it joins change.

@@ -14,45 +14,74 @@ function rackTile(letter, index) {
   return button;
 }
 
-function patternTile({ letter, pending, cursor, joint, bonus }) {
-  const span = document.createElement('span');
-  span.textContent = letter || bonus || '';
-  if (bonus) span.dataset.bonus = bonus;
-  span.classList.toggle('letter', Boolean(letter));
-  span.classList.toggle('pending', pending);
-  span.classList.toggle('cursor', cursor);
-  span.classList.toggle('joint', joint);
-  return span;
+function patternTile({ letter, pending, cursor, joint, bonus, covered }, index) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.dataset.index = index;
+  button.textContent = letter || bonus || '';
+  button.setAttribute('aria-label', `Square ${index + 1}: ${letter || bonus || 'empty'}${covered ? ', covered by another block' : ''}`);
+  button.setAttribute('aria-pressed', String(cursor));
+  button.title = covered ? 'Covered square — still part of this row' : `Start at square ${index + 1}`;
+  if (bonus) button.dataset.bonus = bonus;
+  button.classList.toggle('letter', Boolean(letter));
+  button.classList.toggle('pending', pending);
+  button.classList.toggle('cursor', cursor);
+  button.classList.toggle('joint', joint);
+  button.classList.toggle('covered', covered);
+  return button;
 }
 
-export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal, onTurn }) {
+// Re-rendering a clicked row must not lose keyboard focus.
+function replaceTiles(element, tiles) {
+  const focused = element.contains(document.activeElement) ? document.activeElement.dataset.index : null;
+  element.replaceChildren(...tiles);
+  if (focused != null) element.querySelector(`[data-index="${focused}"]`)?.focus({ preventScroll: true });
+}
+
+export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal, onTurn, onPattern, onSwitchLine }) {
   $('play').addEventListener('click', onPlay);
   $('undo').addEventListener('click', onUndo);
   $('cancel').addEventListener('click', onCancel);
   $('iso').addEventListener('click', onIso);
   $('reveal').addEventListener('click', onReveal);
   $('turn').addEventListener('click', onTurn);
+  $('switch-line').addEventListener('click', onSwitchLine);
+  $('pattern').addEventListener('click', (event) => {
+    const tile = event.target.closest('[data-index]');
+    if (tile && !tile.disabled) onPattern(Number(tile.dataset.index));
+  });
   $('rack').addEventListener('click', (event) => {
     const tile = event.target.closest('[data-index]');
-    if (tile) onRack(Number(tile.dataset.index));
+    if (tile && !tile.disabled) onRack(Number(tile.dataset.index));
   });
 
   return {
-    render({ game, placing, canReveal, canTurn, headline, hint, pattern, message }) {
+    render({ game, placing, busy, canPlace, canIso, canReveal, canTurn, canSwitch, headline, hint, pattern, message }) {
       $('score').textContent = game.score;
       $('turns').textContent = game.turnsLeft;
       $('bag').textContent = game.bag.length;
-      $('rack').replaceChildren(...game.rack.map(rackTile));
+      replaceTiles($('rack'), game.rack.map((letter, index) => {
+        const tile = rackTile(letter, index);
+        tile.disabled = !canPlace;
+        return tile;
+      }));
       $('rack').classList.toggle('idle', !placing);
-      $('play').disabled = !game.pending.length;
-      $('undo').disabled = !game.pending.length;
-      $('cancel').disabled = !placing;
+      $('play').disabled = !canPlace || !game.pending.length;
+      $('undo').disabled = !canPlace || !game.pending.length;
+      $('cancel').disabled = !placing || busy;
+      $('iso').disabled = !canIso;
       $('reveal').disabled = !canReveal;
       $('turn').disabled = !canTurn;
+      $('switch-line').hidden = !canSwitch;
+      $('switch-line').disabled = busy || Boolean(game.pending.length);
       $('headline').textContent = headline;
       $('hint').textContent = hint;
       $('pattern').hidden = !pattern;
-      $('pattern').replaceChildren(...(pattern ?? []).map(patternTile));
+      replaceTiles($('pattern'), (pattern ?? []).map((square, index) => {
+        const tile = patternTile(square, index);
+        tile.disabled = !canPlace;
+        return tile;
+      }));
       $('message').textContent = message?.text ?? '';
       $('message').className = message?.tone ?? '';
     },

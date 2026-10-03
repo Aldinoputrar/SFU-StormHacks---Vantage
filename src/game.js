@@ -1,5 +1,5 @@
 import { add, scale } from './geometry.js';
-import { faceOf, slotKey } from './board.js';
+import { FACE_NORMALS, faceOf, slotKey } from './board.js';
 import { BONUS_KINDS, placeBonuses } from './bonuses.js';
 import { LETTER_VALUES, TILE_COUNTS } from './level.js';
 import { mulberry32, shuffled } from './random.js';
@@ -34,6 +34,7 @@ export function createGame(level, board) {
 
   const game = {
     level,
+    slots: new Set(board.slots.keys()), // exposed slots on the current board
     quarters: 0, // quarter turns of the turntable so far
     bonuses, // slot key -> 'DL' | 'TL' | 'DW' | 'TW'
     letters, // slot key -> committed letter
@@ -57,7 +58,8 @@ export function letterAt(game, key) {
 }
 
 export function placeTile(game, key, rackIndex) {
-  if (letterAt(game, key)) return false;
+  if (game.turnsLeft <= 0 || !game.slots.has(key) || letterAt(game, key)) return false;
+  if (!Number.isInteger(rackIndex) || rackIndex < 0 || rackIndex >= game.rack.length) return false;
   const [letter] = game.rack.splice(rackIndex, 1);
   game.pending.push({ slot: key, letter });
   return true;
@@ -81,7 +83,9 @@ export function cancelPending(game) {
 // Commits this turn's tiles as a word along the chain, read from viewDir, if
 // isWord accepts it.
 export function playWord(game, chain, viewDir, isWord) {
+  if (game.turnsLeft <= 0) return { error: 'No turns left. Your run is complete.' };
   if (!game.pending.length) return { error: 'Place at least one tile first.' };
+  if (!chain?.slots?.length) return { error: 'Choose a line before playing your word.' };
   if (game.pending.some((tile) => !chain.slots.includes(tile.slot))) {
     return { error: 'All your tiles must be on the selected line.' };
   }
@@ -114,16 +118,37 @@ export function turnTurntable(game, board) {
   if (game.pending.length || game.turnsLeft <= 0) return false;
   const level = currentLevel(game);
   const cells = turntableCells(level);
+  if (!cells.size) return false;
+
+  // Determine the exposed faces after the turn without calculating vantage
+  // points again. Reject collisions and turns that would bury a letter.
+  const movedCells = board.cells.map((cell) =>
+    cells.has(cell.join(',')) ? turnOnce(level, cell, [0, 1, 0]).cell : cell,
+  );
+  const solid = new Set(movedCells.map((cell) => cell.join(',')));
+  if (solid.size !== board.cells.length) return false;
+  const slots = new Set();
+  for (const cell of movedCells) {
+    for (const [face, normal] of Object.entries(FACE_NORMALS)) {
+      if (!solid.has(add(cell, normal).join(','))) slots.add(slotKey(cell, face));
+    }
+  }
   const letters = new Map();
   for (const [key, letter] of game.letters) {
-    const { cell, normal } = board.slots.get(key);
+    const slot = board.slots.get(key);
+    if (!slot) return false;
+    const { cell, normal } = slot;
     if (!cells.has(cell.join(','))) {
+      if (!slots.has(key)) return false;
       letters.set(key, letter);
       continue;
     }
     const moved = turnOnce(level, cell, normal);
-    letters.set(slotKey(moved.cell, faceOf(moved.normal)), letter);
+    const movedKey = slotKey(moved.cell, faceOf(moved.normal));
+    if (!slots.has(movedKey) || letters.has(movedKey)) return false;
+    letters.set(movedKey, letter);
   }
+  game.slots = slots;
   game.letters = letters;
   game.quarters = (game.quarters + 1) % 4;
   game.history.push({ type: 'turn' });
