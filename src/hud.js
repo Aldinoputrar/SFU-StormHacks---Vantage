@@ -16,9 +16,8 @@ function rackTile(letter, index) {
 
 function patternTile({ letter, pending, cursor, joint, bonus }) {
   const span = document.createElement('span');
-  span.textContent = letter;
-  span.title = bonus ?? '';
-  span.classList.toggle('bonus', Boolean(bonus));
+  span.textContent = letter || bonus || '';
+  if (bonus) span.dataset.bonus = bonus;
   span.classList.toggle('letter', Boolean(letter));
   span.classList.toggle('pending', pending);
   span.classList.toggle('cursor', cursor);

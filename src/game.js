@@ -1,38 +1,16 @@
-import { add, angleBetween, normalize, scale } from './geometry.js';
-import { ALIGN_TOLERANCE, faceOf, slotKey, slotVisible } from './board.js';
+import { add, scale } from './geometry.js';
+import { faceOf, slotKey } from './board.js';
+import { BONUS_KINDS, placeBonuses } from './bonuses.js';
 import { LETTER_VALUES, TILE_COUNTS } from './level.js';
+import { mulberry32, shuffled } from './random.js';
 import { turnOnce, turnedLevel, turntableCells } from './turntable.js';
 
 export const RACK_SIZE = 7;
 export const BINGO = 50; // for using all seven tiles in one word, as in Scrabble
 
-export const BONUS_KINDS = {
-  DL: { letter: 2, word: 1, label: '2× LETTER' },
-  TL: { letter: 3, word: 1, label: '3× LETTER' },
-  DW: { letter: 1, word: 2, label: '2× WORD' },
-  TW: { letter: 1, word: 3, label: '3× WORD' },
-};
-
-// Small seeded PRNG so every player of a challenge draws the same tiles.
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 function createBag(seed) {
   const tiles = Object.entries(TILE_COUNTS).flatMap(([letter, count]) => Array(count).fill(letter));
-  const random = mulberry32(seed);
-  for (let i = tiles.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
-  }
-  return tiles;
+  return shuffled(tiles, mulberry32(seed));
 }
 
 export function createGame(level, board) {
@@ -46,20 +24,18 @@ export function createGame(level, board) {
     });
   }
 
-  // Bonus squares only count when played from the viewpoint that reveals them.
-  const bonuses = (level.bonuses ?? []).map(({ cell, face, kind, view }) => {
-    const slot = slotKey(cell, face);
-    const dir = normalize(view);
-    if (!board.slots.has(slot) || !slotVisible(board, slot, dir)) {
-      throw new Error(`Bonus ${kind} at ${slot} cannot be seen from its viewpoint`);
-    }
-    return { slot, kind, dir };
-  });
+  // Bonus squares go on free slots, off the turntable so they stay put.
+  const turntable = turntableCells(level);
+  const bonuses = placeBonuses(
+    board,
+    level.seed,
+    (slot) => !letters.has(slot.key) && !turntable.has(slot.cell.join(',')),
+  );
 
   const game = {
     level,
     quarters: 0, // quarter turns of the turntable so far
-    bonuses,
+    bonuses, // slot key -> 'DL' | 'TL' | 'DW' | 'TW'
     letters, // slot key -> committed letter
     pending: [], // tiles placed this turn: { slot, letter }
     rack: [],
@@ -119,7 +95,7 @@ export function playWord(game, chain, viewDir, isWord) {
   if (!isWord(span.word)) return { error: `${span.word} isn't in the dictionary.` };
 
   const placed = game.pending;
-  const points = scoreWord(game, span, placed, viewDir);
+  const points = scoreWord(game, span, placed);
   for (const tile of placed) game.letters.set(tile.slot, tile.letter);
   game.pending = [];
   game.history.push({ type: 'word', view: viewDir, slots: span.slots, placed, word: span.word, points });
@@ -155,27 +131,18 @@ export function turnTurntable(game, board) {
   return true;
 }
 
-// Bonuses revealed from viewDir, by slot.
-export function activeBonuses(game, viewDir) {
-  const active = new Map();
-  for (const bonus of game.bonuses) {
-    if (angleBetween(bonus.dir, viewDir) <= ALIGN_TOLERANCE) active.set(bonus.slot, bonus.kind);
-  }
-  return active;
-}
-
 // Scrabble scoring: letter values, with bonus squares counting only under
 // newly placed tiles. The total is then multiplied by the number of surfaces
 // the word spans, so a word joined across two strips scores double.
-function scoreWord(game, span, placed, viewDir) {
-  const active = activeBonuses(game, viewDir);
+function scoreWord(game, span, placed) {
   const fresh = new Set(placed.map((tile) => tile.slot));
-  const used = span.slots.filter((key) => fresh.has(key) && active.has(key)).map((key) => active.get(key));
+  const covered = span.slots.filter((key) => fresh.has(key) && game.bonuses.has(key));
+  const used = covered.map((key) => game.bonuses.get(key));
 
   let letters = 0;
   let wordMultiplier = 1;
   for (const key of span.slots) {
-    const bonus = fresh.has(key) && active.has(key) ? BONUS_KINDS[active.get(key)] : null;
+    const bonus = covered.includes(key) ? BONUS_KINDS[game.bonuses.get(key)] : null;
     letters += LETTER_VALUES[letterAt(game, key)] * (bonus?.letter ?? 1);
     wordMultiplier *= bonus?.word ?? 1;
   }

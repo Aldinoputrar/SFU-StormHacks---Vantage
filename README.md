@@ -4,7 +4,7 @@ Scrabble, if the board were an impossible object.
 
 ## What it is
 
-A single-player word puzzle played on a floating, Escher-like 3D structure. Explore different viewpoints, connect seemingly separate tile strips, and uncover hidden multipliers to build the highest score you can. Every player plays their own run and competes on a shared global leaderboard.
+A single-player word puzzle played on a floating, Escher-like 3D structure. Explore different viewpoints, connect seemingly separate tile strips, and reach bonus squares on hidden lines to build the highest score you can. Every player plays their own run and competes on a shared global leaderboard.
 
 | Game | What we took from it |
 | --- | --- |
@@ -43,24 +43,17 @@ Orbit the structure freely. Moving the camera costs nothing, and the game highli
 
 Your run ends when you use your last turn or choose to finish early. Your final score can then be submitted to the global leaderboard. Replay to discover better angles and improve your personal best.
 
-## Hidden bonus squares
+## Bonus squares
 
-Some double and triple bonus markers are painted across several surfaces, like anamorphic street art.
+Bonus squares are coloured as on a Scrabble board: **DL** (light blue, double letter), **TL** (dark blue, triple letter), **DW** (pink, double word) and **TW** (red, triple word). DL is the most common and TW the rarest, in Scrabble's proportions scaled down because every face of every block holds tiles. They count only under newly placed tiles.
 
-- From most angles, a marker looks like scattered coloured shapes.
-- From the right spot, the fragments resolve into a readable bonus, such as **3x WORD**.
-- You earn the bonus only when your word uses that square from the viewpoint that reveals it.
-
-Each marker is cut into shards, and each shard is pushed a different distance along the marker's viewing direction. The orthographic camera ignores movement along its own direction, so only from that viewpoint do the shards reassemble into the label ([`src/anamorph.js`](src/anamorph.js)).
-
-Exploration is free, so take time to look for opportunities before spending a turn.
+Triple word squares sit only on lines that join others from some vantage point, so finding hidden lines is the way to the biggest scores. The layout comes from the challenge's seed, so every player gets the same board ([`src/bonuses.js`](src/bonuses.js)).
 
 ## Scoring
 
 - Standard Scrabble letter values and letter/word multipliers.
 - **Merge bonus:** a word's letter total is multiplied by the number of surfaces it spans, so a word joined across two strips scores double.
 - Words are checked against the [word-list](https://github.com/sindresorhus/word-list) English dictionary (about 274,000 words).
-- **Hidden bonuses** only count when played from the angle that reveals them.
 - Using all seven of your tiles in one turn earns **+50**, like in Scrabble.
 - Your final run score is the sum of your scoring plays.
 
@@ -84,7 +77,7 @@ The challenge is to discover those connections and use a limited number of turns
 
 - **Finding lines:** check where the ends of nearby tile strips appear on screen. If two strips meet on screen and point the same way within a tolerance, they count as one line from that viewpoint. See [the alignment maths](#the-alignment-maths) below.
 - **Locking your view:** save the camera position for each play and validate the word against that exact view.
-- **Hidden bonuses:** give each bonus a designed viewing spot; reveal it when the camera is close enough to that spot and angle.
+- **Bonus squares:** place DL, TL, DW and TW squares from the challenge's seed, with triple words only on lines that join others.
 - **Word checking:** validate words against a standard English word list.
 - **Ranked runs:** record the challenge, camera views, tile placements and structure rotations so the server can validate the run using the same rules.
 - **Leaderboard storage:** store player identities and verified best scores in a shared database so rankings include players across browsers and devices.
@@ -146,5 +139,5 @@ npm run vantages  # list the vantage points in the level
 - [x] Reveal mode that shows the real gaps behind joined lines
 - [x] Checking words and scoring
 - [x] Rotating parts of the structure
-- [x] Hidden bonus squares
+- [x] Bonus squares (DL, TL, DW, TW)
 - [ ] More structures: an Escher-style tower, and a small planet with words that curve over the horizon

@@ -64,14 +64,6 @@ export const BROKEN_CUBE = {
   ],
   // Closed rings of tiles, each seen as one from a single viewpoint.
   loops: [STAIRS.loop],
-  // Bonus squares, each painted as an anamorphic marker that only reads
-  // correctly, and only counts, from its own viewpoint.
-  bonuses: [
-    { cell: [9, 0, 3], face: '+z', kind: 'TW', view: [1, 1, 1] }, // on the ABLE ledge
-    { cell: [3, 6, 6], face: '+y', kind: 'DW', view: [0, 1, 1] }, // on the top beam
-    { cell: [-7, -4, 6], face: '+y', kind: 'TL', view: [1, 1, 1] }, // on the Penrose stairs
-    { cell: [0, 0, 2], face: '+y', kind: 'DL', view: [1, 1, -1] }, // on the rise
-  ],
   // Letters already on the board. Each text runs from start along dir, on the
   // given face of each block; spaces are left empty.
   words: [

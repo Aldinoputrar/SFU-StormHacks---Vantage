@@ -183,9 +183,25 @@ kbd {
   color: var(--pending-ink);
 }
 
-#pattern .bonus {
-  background: #f5c2c9;
-  border-color: #d1495b;
+#pattern [data-bonus] {
+  color: #ffffff;
+  font-size: 9px;
+}
+
+#pattern [data-bonus='DL'] {
+  background: #5ba4d6;
+}
+
+#pattern [data-bonus='TL'] {
+  background: #1f6f9f;
+}
+
+#pattern [data-bonus='DW'] {
+  background: #ec9c9c;
+}
+
+#pattern [data-bonus='TW'] {
+  background: #d1495b;
 }
 
 #pattern .cursor {

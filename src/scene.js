@@ -17,6 +17,8 @@ const COLORS = {
   pendingSide: '#f0d98f',
   pendingInk: '#2b6c8a',
 };
+// Bonus squares, coloured as on a Scrabble board.
+const BONUS_COLORS = { DL: '#5ba4d6', TL: '#1f6f9f', DW: '#ec9c9c', TW: '#d1495b' };
 const GLOW = {
   aligned: { color: new THREE.Color('#1fbfae'), base: 0.4, pulse: 0.2, speed: 3 },
   selected: { color: new THREE.Color('#ffae00'), base: 0.15, pulse: 0, speed: 0 },
@@ -24,8 +26,8 @@ const GLOW = {
 };
 
 const textures = new Map();
-function faceTexture(style, letter) {
-  const key = `${style}:${letter}`;
+function faceTexture(style, letter, bonus) {
+  const key = `${style}:${letter}:${bonus ?? ''}`;
   if (textures.has(key)) return textures.get(key);
 
   const size = 256;
@@ -33,7 +35,15 @@ function faceTexture(style, letter) {
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
 
-  if (style === 'empty') {
+  if (style === 'empty' && bonus) {
+    ctx.fillStyle = BONUS_COLORS[bonus];
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 112px system-ui, sans-serif';
+    ctx.fillText(bonus, size / 2, size / 2 + 6);
+  } else if (style === 'empty') {
     ctx.fillStyle = COLORS.empty;
     ctx.fillRect(0, 0, size, size);
     ctx.strokeStyle = COLORS.emptyEdge;
@@ -72,8 +82,9 @@ const vec = (a) => new THREE.Vector3(...a);
 export class BoardView {
   // turntable: { cells, pivot } for the part that can turn, drawn in its own
   // colour so players can spot it.
-  constructor(board, scene, turntable = null) {
+  constructor(board, scene, turntable = null, bonuses = new Map()) {
     this.scene = scene;
+    this.bonuses = bonuses; // slot key -> bonus kind, drawn on empty tiles
     this.turntable = turntable;
     this.spinning = []; // turntable meshes with their resting pose
     this.group = new THREE.Group();
@@ -135,7 +146,7 @@ export class BoardView {
     if (tile.style === style && tile.letter === letter) return;
     tile.style = style;
     tile.letter = letter;
-    tile.face.map = faceTexture(style, letter);
+    tile.face.map = faceTexture(style, letter, style === 'empty' ? this.bonuses.get(key) : null);
     tile.face.needsUpdate = true;
     for (const i of [0, 1, 3, 4, 5]) tile.materials[i] = sideMaterials[style];
 

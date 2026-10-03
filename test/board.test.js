@@ -106,6 +106,7 @@ test('words are scored by letter values times the surfaces they span', () => {
   const game = createGame(BROKEN_CUBE, board);
   const chain = chainsForView(board, ISO).chains.find((c) => c.slots.length === 8 && c.slots.every((key) => !letterAt(game, key)));
   // Spell CAN across the joint between the two ledges (4 tiles + 4 tiles).
+  game.bonuses = new Map();
   game.rack = ['C', 'A', 'N', 'E', 'E', 'E', 'E'];
   for (const [i, letter] of [[3, 'C'], [4, 'A'], [5, 'N']]) placeTile(game, chain.slots[i], game.rack.indexOf(letter));
   assert.match(playWord(game, chain, ISO, () => false).error, /dictionary/);
@@ -114,19 +115,33 @@ test('words are scored by letter values times the surfaces they span', () => {
   assert.equal(game.score, 10);
 });
 
-test('a bonus square counts only from the viewpoint that reveals it', () => {
-  const tripleWord = slotKey([9, 0, 3], '+z'); // 3x word, revealed from (1, 1, 1)
-  const play = (viewDir) => {
-    const game = createGame(BROKEN_CUBE, board);
-    const chain = chainsForView(board, ISO).chains.find((c) => c.slots.includes(tripleWord) && c.slots.length === 8);
-    const at = chain.slots.indexOf(tripleWord);
-    game.rack = ['A', 'T', 'E', 'E', 'E', 'E', 'E'];
-    placeTile(game, chain.slots[at], 0);
-    placeTile(game, chain.slots[at + 1], 0);
-    return playWord(game, chain, viewDir, anyWord).points;
-  };
-  assert.equal(play(ISO).total, 2 * 3);
-  assert.equal(play(normalize([1, 1, 1.2])).total, 2);
+test('bonus squares follow Scrabble proportions and stay off letters', () => {
+  const game = createGame(BROKEN_CUBE, board);
+  const count = (kind) => [...game.bonuses.values()].filter((k) => k === kind).length;
+  assert.ok(count('DL') > count('DW') && count('DW') > count('TL') && count('TL') > count('TW'));
+  assert.ok(count('TW') >= 1);
+  for (const key of game.bonuses.keys()) assert.ok(!game.letters.has(key));
+  // The same seed always gives the same board.
+  assert.deepEqual([...createGame(BROKEN_CUBE, board).bonuses], [...game.bonuses]);
+});
+
+test('triple word squares sit only on lines that join others', () => {
+  const game = createGame(BROKEN_CUBE, board);
+  const joined = new Set(board.joins.flatMap(({ a, b }) => [...board.lines[a.line].slots, ...board.lines[b.line].slots]));
+  board.loops.forEach((loop) => loop.slots.forEach((key) => joined.add(key)));
+  for (const [key, kind] of game.bonuses) if (kind === 'TW') assert.ok(joined.has(key), key);
+});
+
+test('a bonus counts under a newly placed tile', () => {
+  const game = createGame(BROKEN_CUBE, board);
+  const chain = chainsForView(board, ISO).chains.find((c) => c.slots.length === 8 && c.slots.every((key) => !letterAt(game, key)));
+  game.bonuses = new Map([[chain.slots[0], 'TW'], [chain.slots[1], 'DL']]);
+  game.rack = ['H', 'A', 'E', 'E', 'E', 'E', 'E'];
+  placeTile(game, chain.slots[0], 0); // H, 4 points
+  placeTile(game, chain.slots[0 + 1], 0); // A, 1 point doubled
+  const { points } = playWord(game, chain, ISO, anyWord);
+  assert.equal(points.total, (4 + 2) * 3);
+  assert.deepEqual(points.bonuses, ['TW', 'DL']);
 });
 
 test('turning the turntable spends a turn and carries its letters round', () => {

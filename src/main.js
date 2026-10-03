@@ -2,11 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import wordsUrl from '../node_modules/word-list/words.txt?url';
 import { buildBoard, chainsForView, isJoined, nearestVantage } from './board.js';
-import { createAnamorph } from './anamorph.js';
 import { createDictionary } from './dictionary.js';
+import { BONUS_KINDS } from './bonuses.js';
 import {
-  BONUS_KINDS,
-  activeBonuses,
   cancelPending,
   createGame,
   currentLevel,
@@ -59,25 +57,12 @@ let view;
 function drawBoard() {
   view?.dispose();
   const level = currentLevel(game);
-  view = new BoardView(board, scene, { cells: turntableCells(level), pivot: turntableOf(level).start });
+  const turntable = { cells: turntableCells(level), pivot: turntableOf(level).start };
+  view = new BoardView(board, scene, turntable, game.bonuses);
   for (const [key, letter] of game.letters) if (board.slots.has(key)) view.setTile(key, letter, 'fixed');
 }
 drawBoard();
 
-// One anamorphic marker per bonus square, removed once a tile covers it.
-const markers = new Map(
-  game.bonuses.map((bonus, seed) => {
-    const marker = createAnamorph({
-      center: board.slots.get(bonus.slot).center,
-      dir: bonus.dir,
-      kind: bonus.kind,
-      label: BONUS_KINDS[bonus.kind].label,
-      seed: seed + 1,
-    });
-    scene.add(marker);
-    return [bonus.slot, marker];
-  }),
-);
 
 const bounds = new THREE.Box3();
 for (const cell of board.cells) bounds.expandByPoint(new THREE.Vector3(...cell));
@@ -180,7 +165,7 @@ function renderHud() {
   } else if (mode === 'placing' && selection) {
     const { chain } = selection;
     const surfaces = new Set(chain.slotLines).size;
-    const bonuses = activeBonuses(game, lockedDir);
+    const { bonuses } = game;
     headline = chain.cyclic
       ? `Endless loop of ${chain.slots.length} tiles: words can wrap around`
       : `Line of ${chain.slots.length} tiles${surfaces > 1 ? ` across ${surfaces} surfaces` : ''}`;
@@ -190,11 +175,11 @@ function renderHud() {
       pending: game.pending.some((tile) => tile.slot === key),
       cursor: i === selection.cursor,
       joint: i > 0 && chain.slotLines[i] !== chain.slotLines[i - 1],
-      bonus: !letterAt(game, key) && bonuses.has(key) ? BONUS_KINDS[bonuses.get(key)].label : null,
+      bonus: !letterAt(game, key) ? (bonuses.get(key) ?? null) : null,
     }));
     const reachable = chain.slots.filter((key) => !game.letters.has(key) && bonuses.has(key));
     if (reachable.length) {
-      headline += ` · ${reachable.map((key) => BONUS_KINDS[bonuses.get(key)].label).join(', ')} in reach`;
+      headline += ` · ${reachable.map((key) => bonuses.get(key)).join(', ')} in reach`;
     }
   } else if (mode === 'placing') {
     headline = 'View locked';
@@ -432,7 +417,6 @@ function play() {
   }
   for (const tile of result.placed) {
     view.setTile(tile.slot, tile.letter, 'fixed');
-    if (markers.has(tile.slot)) scene.remove(markers.get(tile.slot));
   }
   setMessage(`${result.word}: ${describePoints(result.points)}`, 'success');
   exitPlacing();
@@ -443,7 +427,7 @@ function describePoints({ letters, wordMultiplier, surfaces, bingo, bonuses, tot
   if (wordMultiplier > 1) sum += ` × ${wordMultiplier} word bonus`;
   if (surfaces > 1) sum += ` × ${surfaces} surfaces`;
   if (bingo) sum += ` + ${bingo} for using all seven tiles`;
-  const found = bonuses.length ? ` (found ${bonuses.map((kind) => BONUS_KINDS[kind].label).join(', ')})` : '';
+  const found = bonuses.length ? ` (${bonuses.map((kind) => BONUS_KINDS[kind].name).join(', ')})` : '';
   return sum === String(total) ? `${total} points${found}` : `${sum} = ${total} points${found}`;
 }
 
