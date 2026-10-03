@@ -132,6 +132,13 @@ test('triple word squares sit only on lines that join others', () => {
   for (const [key, kind] of game.bonuses) if (kind === 'TW') assert.ok(joined.has(key), key);
 });
 
+test('word bonuses avoid tiles that overlap another line from a vantage point', () => {
+  // From overhead, the floating ledge's top at (0, 3, 3) sits exactly over the
+  // rise, so a bonus there would look like part of the rise's line.
+  const game = createGame(BROKEN_CUBE, board);
+  assert.ok(!['TW', 'DW'].includes(game.bonuses.get(slotKey([0, 3, 3], '+y'))));
+});
+
 test('a bonus counts under a newly placed tile', () => {
   const game = createGame(BROKEN_CUBE, board);
   const chain = chainsForView(board, ISO).chains.find((c) => c.slots.length === 8 && c.slots.every((key) => !letterAt(game, key)));

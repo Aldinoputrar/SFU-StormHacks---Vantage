@@ -1,4 +1,5 @@
 import { slotKey } from './board.js';
+import { dot, screenBasis } from './geometry.js';
 import { mulberry32, shuffled } from './random.js';
 
 // Premium squares, coloured as on a Scrabble board.
@@ -19,11 +20,32 @@ const SHARES = [
   ['DL', 0.07],
 ];
 
+// Slots that land on exactly the same spot on screen as another slot from
+// some vantage point, like a ledge directly above another strip seen from
+// overhead. A bonus there would look as if it belonged to the other line.
+function stackedSlots(board) {
+  const stacked = new Set();
+  for (const { dir } of board.vantages) {
+    const { right, up } = screenBasis(dir);
+    const spots = new Map();
+    for (const slot of board.slots.values()) {
+      if (dot(slot.normal, dir) < 0.2) continue; // edge-on or facing away
+      const spot = [dot(slot.center, right), dot(slot.center, up)].map((v) => Math.round(v * 1000)).join(',');
+      if (!spots.has(spot)) spots.set(spot, []);
+      spots.get(spot).push(slot.key);
+    }
+    for (const keys of spots.values()) if (keys.length > 1) keys.forEach((key) => stacked.add(key));
+  }
+  return stacked;
+}
+
 // Places bonus squares on the free slots, the same way for a given seed. Triple
 // words only go on lines that join others from some vantage point, so finding
-// hidden lines pays. No two bonus squares sit side by side on a face.
+// hidden lines pays. No two bonus squares sit side by side on a face, and word
+// bonuses never sit where another tile overlaps them from a vantage point.
 export function placeBonuses(board, seed, isFree) {
   const random = mulberry32(seed ^ 0x5bd1e995);
+  const stacked = stackedSlots(board);
   const free = [...board.slots.values()].filter(isFree);
   const hidden = new Set(board.joins.flatMap(({ a, b }) => [...board.lines[a.line].slots, ...board.lines[b.line].slots]));
   for (const loop of board.loops) loop.slots.forEach((key) => hidden.add(key));
@@ -35,7 +57,9 @@ export function placeBonuses(board, seed, isFree) {
     );
 
   for (const [kind, share] of SHARES) {
-    const pool = kind === 'TW' ? free.filter((slot) => hidden.has(slot.key)) : free;
+    let pool = free;
+    if (kind === 'TW' || kind === 'DW') pool = pool.filter((slot) => !stacked.has(slot.key));
+    if (kind === 'TW') pool = pool.filter((slot) => hidden.has(slot.key));
     let wanted = Math.max(1, Math.round(share * free.length));
     for (const slot of shuffled(pool, random)) {
       if (!wanted) break;
