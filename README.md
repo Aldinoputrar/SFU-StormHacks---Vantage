@@ -85,9 +85,18 @@ The challenge is to discover those connections and use a limited number of turns
 - A shared database for persistent leaderboard scores
 - Vite for development and builds
 
+## Getting started
+
+```bash
+npm install
+npm run dev
+```
+
+Open the printed local URL, orbit around the structure, then press **Snap to isometric view** to see LOVE and ABLE line up as LOVEABLE.
+
 ## Roadmap
 
-- [ ] A starting structure: a "broken cube" of floating blocks
+- [x] A starting structure: a "broken cube" of floating blocks
 - [ ] Walking and looking around in first person
 - [ ] Highlighting lines that are lined up on screen
 - [ ] Placing tiles, checking words and scoring
