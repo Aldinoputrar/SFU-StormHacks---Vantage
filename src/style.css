@@ -1,45 +1,251 @@
+:root {
+  --bg: #f3ece2;
+  --ink: #3b3346;
+  --muted: #7a6f86;
+  --panel: rgba(255, 250, 243, 0.92);
+  --line: #d9cfe0;
+  --tile: #f6deb0;
+  --tile-side: #e2c48e;
+  --pending: #fff4cc;
+  --pending-ink: #2b6c8a;
+  --aligned: #1fbfae;
+  --accent: #ff8a00;
+  --error: #b5434a;
+  --success: #2f8a5b;
+}
+
 html,
 body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #f3ece2;
+  background: var(--bg);
+  color: var(--ink);
   font-family: system-ui, sans-serif;
 }
 
 canvas {
   display: block;
+  touch-action: none;
 }
 
-#hud {
+button {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: #fffaf3;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+kbd {
+  font: inherit;
+  font-size: 11px;
+  opacity: 0.6;
+  margin-left: 4px;
+}
+
+#title {
   position: fixed;
   top: 16px;
   left: 16px;
-  color: #3b3346;
-  pointer-events: none;
 }
 
-#hud h1 {
+#title h1 {
   margin: 0;
   font-size: 22px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }
 
-#hud p {
+#title p {
   margin: 4px 0 10px;
   font-size: 13px;
-  opacity: 0.7;
+  color: var(--muted);
 }
 
-#hud button {
-  pointer-events: auto;
-  font: inherit;
+#stats {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+
+#stats div {
+  min-width: 56px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  text-align: center;
+}
+
+#stats dt {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+#stats dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+#status {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+#headline {
+  font-size: 15px;
+}
+
+#hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#message:empty {
+  display: none;
+}
+
+#message {
   font-size: 13px;
-  padding: 6px 12px;
-  border: 1px solid #3b3346;
+  font-weight: 600;
+}
+
+#message.error {
+  color: var(--error);
+}
+
+#message.success {
+  color: var(--success);
+}
+
+#pattern {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+}
+
+#pattern span {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: #ece4f0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+}
+
+#pattern .letter {
+  background: var(--tile);
+  border-color: var(--tile-side);
+}
+
+#pattern .pending {
+  background: var(--pending);
+  color: var(--pending-ink);
+}
+
+#pattern .cursor {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+#pattern .joint {
+  margin-left: 8px;
+}
+
+#tray {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+
+#rack {
+  display: flex;
+  gap: 6px;
+}
+
+#rack .tile {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--tile-side);
+  border-bottom-width: 4px;
   border-radius: 6px;
-  background: #fffaf3;
-  color: #3b3346;
-  cursor: pointer;
+  background: var(--tile);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+#rack .tile sub {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 10px;
+}
+
+#rack.idle .tile {
+  opacity: 0.75;
+}
+
+#actions {
+  display: flex;
+  gap: 6px;
+}
+
+@media (max-width: 720px) {
+  #title p,
+  kbd {
+    display: none;
+  }
+
+  #status {
+    top: 112px;
+  }
+
+  #rack .tile {
+    width: 38px;
+    height: 38px;
+    font-size: 19px;
+  }
 }

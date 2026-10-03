@@ -18,6 +18,8 @@ The board itself hides opportunities. Two strips of tiles on separate surfaces m
 
 An orthographic camera lets surfaces at different depths appear to touch without perspective foreshortening. What counts as adjacent depends on your viewpoint, so finding the right place to look is part of solving the puzzle.
 
+Every face of every block can hold letters: tops, sides and undersides. Each face is a small Scrabble board, and a word can run along the top of one ledge and carry on along the side of another. Words read left to right (or top to bottom) as they appear from where you stand.
+
 ## How to play
 
 Start a solo run with a rack of seven letters and a fixed turn budget. Aim for the highest total score before your turns run out.
@@ -71,12 +73,29 @@ The challenge is to discover those connections and use a limited number of turns
 
 ## How it will work
 
-- **Finding lines:** check where the ends of nearby tile strips appear on screen. If two strips meet on screen and point the same way within a tolerance, they count as one line from that viewpoint.
+- **Finding lines:** check where the ends of nearby tile strips appear on screen. If two strips meet on screen and point the same way within a tolerance, they count as one line from that viewpoint. See [the alignment maths](#the-alignment-maths) below.
 - **Locking your view:** save the camera position for each play and validate the word against that exact view.
 - **Hidden bonuses:** give each bonus a designed viewing spot; reveal it when the camera is close enough to that spot and angle.
 - **Word checking:** validate words against a standard English word list.
 - **Ranked runs:** record the challenge, camera views, tile placements and structure rotations so the server can validate the run using the same rules.
 - **Leaderboard storage:** store player identities and verified best scores in a shared database so rankings include players across browsers and devices.
+
+## The alignment maths
+
+An orthographic camera looking along a direction **d** drops the part of every point that lies along **d**. So two points land on the same spot on screen exactly when their difference is parallel to **d**.
+
+Take a strip A whose next tile would sit at **N** (one step past its end, stepping by **a**), and a strip B that starts at **P** and steps by **b**. B continues A on screen when:
+
+- **P − N** is parallel to **d**, so B's first tile appears where A's next tile would be, and
+- **a − b** is parallel to **d**, so both strips step the same way and the same distance on screen.
+
+Both differences must point along **d**, which fixes the viewpoint up to sign; the sign is chosen so both faces point at the camera. The game solves this for every pair of strip ends when a level loads ([`src/board.js`](src/board.js)), then:
+
+- keeps only the cube's 26 symmetry directions (towards its faces, edges and corners), like Monument Valley's fixed views; any two parallel strips line up from *some* angle, so this keeps vantage points special,
+- drops joins where another block hides a tile, by stepping a ray through the voxel grid from each tile towards the camera ([`src/geometry.js`](src/geometry.js)),
+- snaps the camera to a vantage point when you let go within 10° of it.
+
+Run `npm run vantages` to list every vantage point in a level and the strips that join there.
 
 ## Planned stack
 
@@ -92,14 +111,27 @@ npm install
 npm run dev
 ```
 
-Open the printed local URL, orbit around the structure, then press **Snap to isometric view** to see LOVE and ABLE line up as LOVEABLE.
+Open the printed local URL, orbit around the structure, then press **Isometric view** to see LOVE and ABLE line up as LOVEABLE.
+
+```bash
+npm test          # alignment maths and placement rules
+npm run vantages  # list the vantage points in the level
+```
+
+### Controls
+
+- **Drag** to orbit, **scroll** to zoom. Let go near a vantage point and the camera snaps to it; joined lines glow.
+- **Click a tile** to lock the view and pick the line through it. Click the same tile again to switch to the other line through it.
+- **Type** letters (or tap your rack) to place them along the line, **Backspace** to undo, **Enter** to play, **Esc** to cancel.
 
 ## Roadmap
 
 - [x] A starting structure: a "broken cube" of floating blocks
 - [ ] Walking and looking around in first person
-- [ ] Highlighting lines that are lined up on screen
-- [ ] Placing tiles, checking words and scoring
+- [x] Highlighting lines that are lined up on screen
+- [x] Letters on every face of every block
+- [x] Locking the view and placing tiles
+- [ ] Checking words and scoring
 - [ ] Rotating parts of the structure
 - [ ] Hidden bonus squares
 - [ ] More structures: an Escher-style tower, and a small planet with words that curve over the horizon

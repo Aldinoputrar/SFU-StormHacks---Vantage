@@ -7,11 +7,33 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="hud">
+    <header id="title">
       <h1>Vantage</h1>
-      <p>Drag to orbit · Scroll to zoom · Right-drag to pan</p>
-      <button id="snap">Snap to isometric view</button>
-    </div>
+      <p>Drag to orbit · Scroll to zoom · Click a tile to start a word</p>
+      <button id="iso" type="button">Isometric view</button>
+    </header>
+
+    <dl id="stats">
+      <div><dt>Turns</dt><dd id="turns"></dd></div>
+      <div><dt>Bag</dt><dd id="bag"></dd></div>
+    </dl>
+
+    <section id="status" aria-live="polite">
+      <strong id="headline"></strong>
+      <div id="pattern" hidden></div>
+      <span id="hint"></span>
+      <span id="message"></span>
+    </section>
+
+    <footer id="tray">
+      <div id="rack" aria-label="Your letters"></div>
+      <div id="actions">
+        <button id="play" type="button">Play word <kbd>Enter</kbd></button>
+        <button id="undo" type="button">Undo <kbd>⌫</kbd></button>
+        <button id="cancel" type="button">Cancel <kbd>Esc</kbd></button>
+      </div>
+    </footer>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
