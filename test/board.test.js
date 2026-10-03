@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildBoard, chainsForView, isJoined, slotKey } from '../src/board.js';
-import { createGame, letterAt, placeTile, playWord } from '../src/game.js';
+import { createGame, currentLevel, letterAt, placeTile, playWord, turnTurntable } from '../src/game.js';
 import { normalize, rayHitsVoxel } from '../src/geometry.js';
 import { createDictionary } from '../src/dictionary.js';
 import { readFileSync } from 'node:fs';
@@ -127,4 +127,16 @@ test('a bonus square counts only from the viewpoint that reveals it', () => {
   };
   assert.equal(play(ISO).total, 2 * 3);
   assert.equal(play(normalize([1, 1, 1.2])).total, 2);
+});
+
+test('turning the turntable spends a turn and carries its letters round', () => {
+  const game = createGame(BROKEN_CUBE, board);
+  const top = slotKey([1, 1, -3], '+y'); // two blocks along the turntable from its pivot at (1, 1, -1)
+  game.letters.set(top, 'Q');
+  assert.ok(turnTurntable(game, board));
+  const turned = buildBoard(currentLevel(game));
+  // A quarter turn about +y takes the offset (0, 0, -2) to (-2, 0, 0).
+  assert.equal(game.letters.get(slotKey([-1, 1, -1], '+y')), 'Q');
+  assert.ok(turned.slots.has(slotKey([-1, 1, -1], '+y')));
+  assert.equal(game.turnsLeft, BROKEN_CUBE.turns - 1);
 });

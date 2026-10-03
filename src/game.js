@@ -1,6 +1,7 @@
 import { add, angleBetween, normalize, scale } from './geometry.js';
-import { ALIGN_TOLERANCE, slotKey, slotVisible } from './board.js';
+import { ALIGN_TOLERANCE, faceOf, slotKey, slotVisible } from './board.js';
 import { LETTER_VALUES, TILE_COUNTS } from './level.js';
+import { turnOnce, turnedLevel, turntableCells } from './turntable.js';
 
 export const RACK_SIZE = 7;
 export const BINGO = 50; // for using all seven tiles in one word, as in Scrabble
@@ -56,6 +57,8 @@ export function createGame(level, board) {
   });
 
   const game = {
+    level,
+    quarters: 0, // quarter turns of the turntable so far
     bonuses,
     letters, // slot key -> committed letter
     pending: [], // tiles placed this turn: { slot, letter }
@@ -124,6 +127,32 @@ export function playWord(game, chain, viewDir, isWord) {
   game.turnsLeft--;
   refillRack(game);
   return { ...span, placed, points };
+}
+
+// The level as it stands, with the turntable turned.
+export const currentLevel = (game) => turnedLevel(game.level, game.quarters);
+
+// Spends a turn turning the turntable a quarter turn. Letters on it turn
+// with it. board is the board before the turn.
+export function turnTurntable(game, board) {
+  if (game.pending.length || game.turnsLeft <= 0) return false;
+  const level = currentLevel(game);
+  const cells = turntableCells(level);
+  const letters = new Map();
+  for (const [key, letter] of game.letters) {
+    const { cell, normal } = board.slots.get(key);
+    if (!cells.has(cell.join(','))) {
+      letters.set(key, letter);
+      continue;
+    }
+    const moved = turnOnce(level, cell, normal);
+    letters.set(slotKey(moved.cell, faceOf(moved.normal)), letter);
+  }
+  game.letters = letters;
+  game.quarters = (game.quarters + 1) % 4;
+  game.history.push({ type: 'turn' });
+  game.turnsLeft--;
+  return true;
 }
 
 // Bonuses revealed from viewDir, by slot.

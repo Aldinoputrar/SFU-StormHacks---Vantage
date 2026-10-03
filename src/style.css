@@ -73,7 +73,9 @@ kbd {
 
 #view-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+  max-width: calc(100vw - 200px);
 }
 
 #stats {
@@ -113,7 +115,7 @@ kbd {
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
-  max-width: min(520px, calc(100vw - 32px));
+  max-width: min(440px, calc(100vw - 32px));
   padding: 10px 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -243,14 +245,43 @@ kbd {
   gap: 6px;
 }
 
+@media (max-width: 1180px) {
+  #status {
+    top: 112px;
+  }
+}
+
 @media (max-width: 720px) {
   #title p,
   kbd {
     display: none;
   }
 
+  #title h1 {
+    font-size: 18px;
+    margin-bottom: 34px;
+  }
+
+  #view-buttons {
+    max-width: calc(100vw - 32px);
+  }
+
+  #view-buttons button {
+    font-size: 12px;
+    padding: 5px 8px;
+  }
+
+  #stats div {
+    min-width: 40px;
+    padding: 4px 6px;
+  }
+
+  #stats dd {
+    font-size: 16px;
+  }
+
   #status {
-    top: 112px;
+    top: 116px;
   }
 
   #rack .tile {

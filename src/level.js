@@ -57,7 +57,7 @@ export const BROKEN_CUBE = {
     { start: [6, 6, 5], dir: [0, 0, -1], length: 4 }, // back
     { start: [6, 5, 0], dir: [0, -1, 0], length: 4 }, // drop
     { start: [2, -2, 3], dir: [0, 0, 1], length: 4 }, // joins rise from (-1, 1, 1)
-    { start: [1, 1, -1], dir: [0, 0, -1], length: 4 }, // joins rise from (1, 1, -1)
+    { start: [1, 1, -1], dir: [0, 0, -1], length: 4, turntable: true }, // joins rise from (1, 1, -1); turns
     { start: [0, 3, 3], dir: [-1, 0, 0], length: 4 }, // joins top from (0, 1, 1)
     { start: [6, 8, 4], dir: [1, 0, 0], length: 4 }, // joins top from (0, 1, -1)
     ...STAIRS.blocks,
@@ -70,7 +70,7 @@ export const BROKEN_CUBE = {
     { cell: [9, 0, 3], face: '+z', kind: 'TW', view: [1, 1, 1] }, // on the ABLE ledge
     { cell: [3, 6, 6], face: '+y', kind: 'DW', view: [0, 1, 1] }, // on the top beam
     { cell: [-7, -4, 6], face: '+y', kind: 'TL', view: [1, 1, 1] }, // on the Penrose stairs
-    { cell: [1, 1, -2], face: '+y', kind: 'DL', view: [0, 1, 0] }, // on the back ledge
+    { cell: [0, 0, 2], face: '+y', kind: 'DL', view: [1, 1, -1] }, // on the rise
   ],
   // Letters already on the board. Each text runs from start along dir, on the
   // given face of each block; spaces are left empty.

@@ -9,23 +9,27 @@ import {
   activeBonuses,
   cancelPending,
   createGame,
+  currentLevel,
   letterAt,
   placeTile,
   playWord,
+  turnTurntable,
   undoTile,
 } from './game.js';
 import { createHud } from './hud.js';
 import { BROKEN_CUBE } from './level.js';
 import { BoardView } from './scene.js';
+import { turntableCells, turntableOf } from './turntable.js';
 
 const SNAP_ANGLE = THREE.MathUtils.degToRad(10); // release this close to a vantage and the camera snaps
 const HINT_ANGLE = THREE.MathUtils.degToRad(20);
 const SNAP_MS = 350;
+const TURN_MS = 500;
 const ISOMETRIC = [1, 1, 1];
 const REVEAL_TURN = THREE.MathUtils.degToRad(40); // how far reveal swings the camera
 const REVEAL_HOLD_MS = 1200;
 
-const board = buildBoard(BROKEN_CUBE);
+let board = buildBoard(BROKEN_CUBE);
 const game = createGame(BROKEN_CUBE, board);
 
 // The word list is large, so it loads in the background while players explore.
@@ -50,8 +54,15 @@ const fill = new THREE.DirectionalLight('#ffffff', 0.9);
 fill.position.set(-6, -12, -8);
 scene.add(fill);
 
-const view = new BoardView(board, scene);
-for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed');
+let view;
+// (Re)draws the board, e.g. after the turntable turns.
+function drawBoard() {
+  view?.dispose();
+  const level = currentLevel(game);
+  view = new BoardView(board, scene, { cells: turntableCells(level), pivot: turntableOf(level).start });
+  for (const [key, letter] of game.letters) if (board.slots.has(key)) view.setTile(key, letter, 'fixed');
+}
+drawBoard();
 
 // One anamorphic marker per bonus square, removed once a tile covers it.
 const markers = new Map(
@@ -104,6 +115,7 @@ let selection = null; // { chain, cursor, clicked } while placing
 let lockedDir = null;
 let snap = null;
 let revealing = false; // showing how far apart joined strips really are
+let turning = null; // turntable animation in progress
 let message = null;
 let messageTimer;
 
@@ -114,6 +126,7 @@ const hud = createHud({
   onCancel: exitPlacing,
   onIso: () => mode === 'explore' && !snap && !revealing && animateTo(ISOMETRIC),
   onReveal: reveal,
+  onTurn: turn,
 });
 
 // Dashed lines across each hidden gap, drawn while revealing.
@@ -191,8 +204,8 @@ function renderHud() {
     const near = nearestVantage(board, viewDir());
     if (joined.length) {
       const loops = joined.filter((chain) => chain.cyclic).length;
-      headline = `Vantage point! ${joined.length} hidden line${joined.length > 1 ? 's' : ''} joined`;
-      if (loops) headline += `, including an endless loop`;
+      headline = `Vantage point! ${joined.length} line${joined.length > 1 ? 's' : ''} joined`;
+      if (loops) headline += ' + an endless loop';
       hint = 'Click a glowing tile to play along it · Reveal to see the trick';
     } else {
       headline = near && near.angle < HINT_ANGLE ? 'Something lines up nearby…' : 'Find where the strips line up';
@@ -200,8 +213,10 @@ function renderHud() {
     }
   }
 
-  const canReveal = !revealing && !snap && current.chains.some(isJoined);
-  hud.render({ game, placing: mode === 'placing', canReveal, headline, hint, pattern, message });
+  const busy = revealing || snap || turning;
+  const canReveal = !busy && current.chains.some(isJoined);
+  const canTurn = !busy && mode === 'explore';
+  hud.render({ game, placing: mode === 'placing', canReveal, canTurn, headline, hint, pattern, message });
 }
 
 // Swings the camera around the target to look from dir.
@@ -289,8 +304,30 @@ function drawGhosts(chain) {
   }
 }
 
+// Spends a turn turning the turntable a quarter turn, animating it first.
+function turn() {
+  if (mode !== 'explore' || snap || revealing || turning) return;
+  turning = { start: performance.now() };
+  controls.enabled = false;
+  renderHud();
+}
+
+function stepTurn(now) {
+  const t = Math.min(1, (now - turning.start) / TURN_MS);
+  view.spinTurntable((Math.PI / 2) * (1 - (1 - t) ** 3));
+  if (t < 1) return;
+  turning = null;
+  turnTurntable(game, board);
+  board = buildBoard(currentLevel(game));
+  drawBoard();
+  mode = game.turnsLeft > 0 ? 'explore' : 'over';
+  controls.enabled = true;
+  setMessage('The turntable turned. New lines may line up now.', 'success');
+  refresh();
+}
+
 function lockView(key) {
-  if (mode !== 'explore' || snap || revealing) return;
+  if (mode !== 'explore' || snap || revealing || turning) return;
   snapIfNear(() => {
     mode = 'placing';
     controls.enabled = false;
@@ -414,7 +451,7 @@ const raycaster = new THREE.Raycaster();
 const pointerDown = new THREE.Vector2();
 renderer.domElement.addEventListener('pointerdown', (event) => pointerDown.set(event.clientX, event.clientY));
 renderer.domElement.addEventListener('pointerup', (event) => {
-  if (snap || revealing || pointerDown.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 6) return;
+  if (snap || revealing || turning || pointerDown.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 6) return;
   const ndc = new THREE.Vector2(
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1,
@@ -456,6 +493,7 @@ window.addEventListener('keydown', (event) => {
 refresh();
 renderer.setAnimationLoop((time) => {
   if (snap) stepSnap(performance.now());
+  if (turning) stepTurn(performance.now());
   view.animate(time / 1000);
   renderer.render(scene, camera);
 });

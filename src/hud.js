@@ -26,19 +26,20 @@ function patternTile({ letter, pending, cursor, joint, bonus }) {
   return span;
 }
 
-export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal }) {
+export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal, onTurn }) {
   $('play').addEventListener('click', onPlay);
   $('undo').addEventListener('click', onUndo);
   $('cancel').addEventListener('click', onCancel);
   $('iso').addEventListener('click', onIso);
   $('reveal').addEventListener('click', onReveal);
+  $('turn').addEventListener('click', onTurn);
   $('rack').addEventListener('click', (event) => {
     const tile = event.target.closest('[data-index]');
     if (tile) onRack(Number(tile.dataset.index));
   });
 
   return {
-    render({ game, placing, canReveal, headline, hint, pattern, message }) {
+    render({ game, placing, canReveal, canTurn, headline, hint, pattern, message }) {
       $('score').textContent = game.score;
       $('turns').textContent = game.turnsLeft;
       $('bag').textContent = game.bag.length;
@@ -48,6 +49,7 @@ export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal })
       $('undo').disabled = !game.pending.length;
       $('cancel').disabled = !placing;
       $('reveal').disabled = !canReveal;
+      $('turn').disabled = !canTurn;
       $('headline').textContent = headline;
       $('hint').textContent = hint;
       $('pattern').hidden = !pattern;

@@ -133,6 +133,7 @@ npm run vantages  # list the vantage points in the level
 - **Click a tile** to lock the view and pick the line through it. Click the same tile again to switch to the other line through it.
 - **Type** letters (or tap your rack) to place them along the line, **Backspace** to undo, **Enter** to play, **Esc** to cancel.
 - **Reveal the trick** shows the real 3D gaps behind the lines joined at the current vantage point.
+- **Turn the ledge** spends a turn rotating the blue ledge a quarter turn about its first block. Letters on it turn with it, and the lines it joins change.
 
 ## Roadmap
 
@@ -144,6 +145,6 @@ npm run vantages  # list the vantage points in the level
 - [x] Penrose-stairs loop that words can wrap around
 - [x] Reveal mode that shows the real gaps behind joined lines
 - [x] Checking words and scoring
-- [ ] Rotating parts of the structure
+- [x] Rotating parts of the structure
 - [x] Hidden bonus squares
 - [ ] More structures: an Escher-style tower, and a small planet with words that curve over the horizon

@@ -6,6 +6,7 @@ const TILE_SIZE = 0.84;
 const HEIGHT = { empty: 0.02, fixed: 0.09, pending: 0.09 };
 const COLORS = {
   stone: '#b9a7c9',
+  turntable: '#9fb7c9',
   empty: '#cabbd7',
   emptyEdge: '#a996bd',
   emptySide: '#c2b2d0',
@@ -69,7 +70,12 @@ const vec = (a) => new THREE.Vector3(...a);
 
 // Draws the board: stone blocks with a tile on every exposed face.
 export class BoardView {
-  constructor(board, scene) {
+  // turntable: { cells, pivot } for the part that can turn, drawn in its own
+  // colour so players can spot it.
+  constructor(board, scene, turntable = null) {
+    this.scene = scene;
+    this.turntable = turntable;
+    this.spinning = []; // turntable meshes with their resting pose
     this.group = new THREE.Group();
     this.tiles = new Map();
     this.pickables = [];
@@ -77,8 +83,11 @@ export class BoardView {
 
     const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
     const stone = new THREE.MeshStandardMaterial({ color: COLORS.stone, roughness: 0.95 });
+    const turntableStone = new THREE.MeshStandardMaterial({ color: COLORS.turntable, roughness: 0.95 });
+    const onTurntable = (cell) => Boolean(turntable?.cells.has(cell.join(',')));
     for (const cell of board.cells) {
-      const block = new THREE.Mesh(blockGeometry, stone);
+      const block = new THREE.Mesh(blockGeometry, onTurntable(cell) ? turntableStone : stone);
+      if (onTurntable(cell)) this.spinning.push(block);
       block.position.set(...cell);
       block.userData.cell = cell;
       this.group.add(block);
@@ -96,11 +105,29 @@ export class BoardView {
       this.tiles.set(slot.key, tile);
       this.setTile(slot.key, '', 'empty');
       this.orient(tile, vec(slot.axes[0]));
+      if (onTurntable(slot.cell)) this.spinning.push(mesh);
       this.group.add(mesh);
       this.pickables.push(mesh);
     }
 
     scene.add(this.group);
+  }
+
+  dispose() {
+    this.scene.remove(this.group);
+  }
+
+  // Turns the turntable's meshes by angle about the vertical axis through
+  // its pivot, for animating a quarter turn before the board is rebuilt.
+  spinTurntable(angle) {
+    const pivot = new THREE.Vector3(...this.turntable.pivot);
+    const spin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+    for (const mesh of this.spinning) {
+      mesh.userData.rest ??= { position: mesh.position.clone(), quaternion: mesh.quaternion.clone() };
+      const { position, quaternion } = mesh.userData.rest;
+      mesh.position.copy(position).sub(pivot).applyQuaternion(spin).add(pivot);
+      mesh.quaternion.copy(spin).multiply(quaternion);
+    }
   }
 
   setTile(key, letter, style) {
