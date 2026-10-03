@@ -26,6 +26,10 @@ scene.add(new THREE.HemisphereLight('#fff6e8', '#8a7a99', 1.6));
 const sun = new THREE.DirectionalLight('#ffffff', 1.4);
 sun.position.set(10, 20, 6);
 scene.add(sun);
+// Undersides hold letters too, so light them from below.
+const fill = new THREE.DirectionalLight('#ffffff', 0.9);
+fill.position.set(-6, -12, -8);
+scene.add(fill);
 
 const view = new BoardView(board, scene);
 for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed');

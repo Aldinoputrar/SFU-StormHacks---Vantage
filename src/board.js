@@ -36,7 +36,7 @@ const AXES = [
 const MIN_FACING = 0.2; // a face must point at least this much toward the camera
 const MIN_STEP = 0.5; // tiles squashed below this on screen are unreadable
 const MAX_ELEVATION = 0.99; // orbit controls cannot look straight up or down
-const MIN_JOIN_PART = 2; // single tiles would join with something from almost anywhere
+const MIN_JOINED_LENGTH = 3; // two lone tiles meeting at a corner are not a line
 export const ALIGN_TOLERANCE = (2 * Math.PI) / 180;
 
 const cellKey = (cell) => cell.join(',');
@@ -163,15 +163,13 @@ function slotsVisible(board, keys, dir) {
 }
 
 function findJoins(board) {
-  const ends = board.lines
-    .filter((line) => line.slots.length >= MIN_JOIN_PART)
-    .flatMap((line) => lineEnds(board, line));
+  const ends = board.lines.flatMap((line) => lineEnds(board, line));
   const joins = [];
   for (let i = 0; i < ends.length; i++) {
     for (let j = i + 1; j < ends.length; j++) {
       const a = ends[i];
       const b = ends[j];
-      if (a.line === b.line) continue;
+      if (a.line === b.line || a.line.slots.length + b.line.slots.length < MIN_JOINED_LENGTH) continue;
       const dir = joinDirection(a, b);
       if (!dir || !slotsVisible(board, a.line.slots, dir) || !slotsVisible(board, b.line.slots, dir)) continue;
       joins.push({ a: { line: a.line.id, end: a.end }, b: { line: b.line.id, end: b.end }, dir });
