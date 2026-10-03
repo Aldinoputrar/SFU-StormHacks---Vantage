@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import wordsUrl from '../node_modules/word-list/words.txt?url';
 import { buildBoard, chainsForView, isJoined, nearestVantage } from './board.js';
+import { createDictionary } from './dictionary.js';
 import { cancelPending, createGame, letterAt, placeTile, playWord, undoTile } from './game.js';
 import { createHud } from './hud.js';
 import { BROKEN_CUBE } from './level.js';
@@ -15,6 +17,13 @@ const REVEAL_HOLD_MS = 1200;
 
 const board = buildBoard(BROKEN_CUBE);
 const game = createGame(BROKEN_CUBE, board);
+
+// The word list is large, so it loads in the background while players explore.
+let isWord = null;
+fetch(wordsUrl)
+  .then((response) => response.text())
+  .then((text) => (isWord = createDictionary(text)))
+  .catch(() => setMessage('Could not load the dictionary. Check your connection and reload.', 'error'));
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -128,7 +137,7 @@ function renderHud() {
     headline = 'Behind the illusion';
     hint = 'The dashed lines show how far apart the joined strips really are';
   } else if (mode === 'over') {
-    headline = 'Run complete';
+    headline = `Run complete: ${game.score} points`;
     hint = `You played ${game.history.length} words. Orbit around to admire them.`;
   } else if (mode === 'placing' && selection) {
     const { chain } = selection;
@@ -344,15 +353,24 @@ function undo() {
 
 function play() {
   if (mode !== 'placing' || !selection) return;
-  const result = playWord(game, selection.chain, lockedDir);
+  if (!isWord) {
+    setMessage('Still loading the dictionary…', 'error');
+    return;
+  }
+  const result = playWord(game, selection.chain, lockedDir, isWord);
   if (result.error) {
     setMessage(result.error, 'error');
     return;
   }
   for (const tile of result.placed) view.setTile(tile.slot, tile.letter, 'fixed');
-  const across = result.surfaces > 1 ? ` across ${result.surfaces} surfaces` : '';
-  setMessage(`Played ${result.word}${across}`, 'success');
+  setMessage(`${result.word}: ${describePoints(result.points)}`, 'success');
   exitPlacing();
+}
+
+function describePoints({ letters, surfaces, bingo, total }) {
+  let sum = surfaces > 1 ? `${letters} × ${surfaces} surfaces` : `${letters}`;
+  if (bingo) sum += ` + ${bingo} for using all seven tiles`;
+  return sum === String(total) ? `${total} points` : `${sum} = ${total} points`;
 }
 
 const raycaster = new THREE.Raycaster();

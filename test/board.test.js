@@ -3,9 +3,12 @@ import { test } from 'node:test';
 import { buildBoard, chainsForView, isJoined, slotKey } from '../src/board.js';
 import { createGame, letterAt, placeTile, playWord } from '../src/game.js';
 import { normalize, rayHitsVoxel } from '../src/geometry.js';
+import { createDictionary } from '../src/dictionary.js';
+import { readFileSync } from 'node:fs';
 import { BROKEN_CUBE } from '../src/level.js';
 
 const board = buildBoard(BROKEN_CUBE);
+const anyWord = () => true;
 const ISO = normalize([1, 1, 1]);
 const lettersOf = (game, chain) => chain.slots.map((key) => letterAt(game, key) || '.').join('');
 
@@ -49,7 +52,7 @@ test('tiles off the selected line are rejected', () => {
   const chain = chainsForView(board, ISO).chains.find((c) => lettersOf(game, c) === 'LOVEABLE');
   // Put any rack tile on the bottom face of the LOVE ledge: not on this line.
   placeTile(game, slotKey([0, -3, 0], '-y'), 0);
-  assert.match(playWord(game, chain, ISO).error, /selected line/);
+  assert.match(playWord(game, chain, ISO, anyWord).error, /selected line/);
 });
 
 test('tiles must not leave gaps', () => {
@@ -58,9 +61,9 @@ test('tiles must not leave gaps', () => {
   const chain = chains.find((c) => c.slots.length >= 8 && c.slots.every((key) => !letterAt(game, key)));
   placeTile(game, chain.slots[0], 0);
   placeTile(game, chain.slots[2], 0);
-  assert.match(playWord(game, chain, ISO).error, /gaps/);
+  assert.match(playWord(game, chain, ISO, anyWord).error, /gaps/);
   placeTile(game, chain.slots[1], 0);
-  const result = playWord(game, chain, ISO);
+  const result = playWord(game, chain, ISO, anyWord);
   assert.equal(result.word.length, 3);
   assert.equal(game.rack.length, 7);
   assert.equal(game.turnsLeft, BROKEN_CUBE.turns - 1);
@@ -78,7 +81,7 @@ test('a word on the loop can wrap past where the loop was declared to start', ()
   const n = loop.slots.length;
   const rackTiles = game.rack.slice(0, 3).join('');
   for (const i of [n - 1, 0, 1]) placeTile(game, loop.slots[i], 0);
-  const result = playWord(game, loop, ISO);
+  const result = playWord(game, loop, ISO, anyWord);
   assert.equal(result.word, rackTiles);
 });
 
@@ -90,4 +93,23 @@ test('tiles hidden from the locked view are cut out of lines', () => {
   const { bySlot } = chainsForView(board, above, undefined, true);
   assert.equal(bySlot.get(hidden), undefined);
   assert.ok(bySlot.get(slotKey([0, 0, 2], '+y')).every((chain) => !chain.slots.includes(hidden)));
+});
+
+test('the dictionary accepts real words and rejects others', () => {
+  const isWord = createDictionary(readFileSync('node_modules/word-list/words.txt', 'utf8'));
+  assert.ok(isWord('LOVEABLE'));
+  assert.ok(isWord('larch'));
+  assert.ok(!isWord('CHARL'));
+});
+
+test('words are scored by letter values times the surfaces they span', () => {
+  const game = createGame(BROKEN_CUBE, board);
+  const chain = chainsForView(board, ISO).chains.find((c) => c.slots.length === 8 && c.slots.every((key) => !letterAt(game, key)));
+  // Spell CAN across the joint between the two ledges (4 tiles + 4 tiles).
+  game.rack = ['C', 'A', 'N', 'E', 'E', 'E', 'E'];
+  for (const [i, letter] of [[3, 'C'], [4, 'A'], [5, 'N']]) placeTile(game, chain.slots[i], game.rack.indexOf(letter));
+  assert.match(playWord(game, chain, ISO, () => false).error, /dictionary/);
+  const { points } = playWord(game, chain, ISO, anyWord);
+  assert.deepEqual(points, { letters: 5, surfaces: 2, bingo: 0, total: 10 });
+  assert.equal(game.score, 10);
 });

@@ -37,6 +37,7 @@ export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal })
 
   return {
     render({ game, placing, canReveal, headline, hint, pattern, message }) {
+      $('score').textContent = game.score;
       $('turns').textContent = game.turnsLeft;
       $('bag').textContent = game.bag.length;
       $('rack').replaceChildren(...game.rack.map(rackTile));

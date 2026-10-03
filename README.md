@@ -56,7 +56,8 @@ Exploration is free, so take time to look for opportunities before spending a tu
 ## Scoring
 
 - Standard Scrabble letter values and letter/word multipliers.
-- **Merge bonus:** a word that stretches across more than one surface scores extra, scaled by the number of surfaces it crosses.
+- **Merge bonus:** a word's letter total is multiplied by the number of surfaces it spans, so a word joined across two strips scores double.
+- Words are checked against the [word-list](https://github.com/sindresorhus/word-list) English dictionary (about 274,000 words).
 - **Hidden bonuses** only count when played from the angle that reveals them.
 - Using all seven of your tiles in one turn earns **+50**, like in Scrabble.
 - Your final run score is the sum of your scoring plays.
@@ -140,7 +141,7 @@ npm run vantages  # list the vantage points in the level
 - [x] Locking the view and placing tiles
 - [x] Penrose-stairs loop that words can wrap around
 - [x] Reveal mode that shows the real gaps behind joined lines
-- [ ] Checking words and scoring
+- [x] Checking words and scoring
 - [ ] Rotating parts of the structure
 - [ ] Hidden bonus squares
 - [ ] More structures: an Escher-style tower, and a small planet with words that curve over the horizon

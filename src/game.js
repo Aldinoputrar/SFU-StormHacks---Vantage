@@ -1,8 +1,9 @@
 import { add, scale } from './geometry.js';
 import { slotKey } from './board.js';
-import { TILE_COUNTS } from './level.js';
+import { LETTER_VALUES, TILE_COUNTS } from './level.js';
 
 export const RACK_SIZE = 7;
+export const BINGO = 50; // for using all seven tiles in one word, as in Scrabble
 
 // Small seeded PRNG so every player of a challenge draws the same tiles.
 function mulberry32(seed) {
@@ -43,6 +44,7 @@ export function createGame(level, board) {
     rack: [],
     bag: createBag(level.seed),
     turnsLeft: level.turns,
+    score: 0,
     history: [], // every play, with the view it was made from
   };
   refillRack(game);
@@ -79,9 +81,9 @@ export function cancelPending(game) {
   return slots;
 }
 
-// Commits this turn's tiles as a word along the chain, read from viewDir.
-// Dictionary checks and scoring come next; this enforces placement only.
-export function playWord(game, chain, viewDir) {
+// Commits this turn's tiles as a word along the chain, read from viewDir, if
+// isWord accepts it.
+export function playWord(game, chain, viewDir, isWord) {
   if (!game.pending.length) return { error: 'Place at least one tile first.' };
   if (game.pending.some((tile) => !chain.slots.includes(tile.slot))) {
     return { error: 'All your tiles must be on the selected line.' };
@@ -93,14 +95,25 @@ export function playWord(game, chain, viewDir) {
     if (!span.error) break;
   }
   if (span.error) return span;
+  if (!isWord(span.word)) return { error: `${span.word} isn't in the dictionary.` };
 
   const placed = game.pending;
+  const points = scoreWord(game, span, placed);
   for (const tile of placed) game.letters.set(tile.slot, tile.letter);
   game.pending = [];
-  game.history.push({ type: 'word', view: viewDir, slots: span.slots, placed, word: span.word });
+  game.history.push({ type: 'word', view: viewDir, slots: span.slots, placed, word: span.word, points });
+  game.score += points.total;
   game.turnsLeft--;
   refillRack(game);
-  return { ...span, placed };
+  return { ...span, placed, points };
+}
+
+// Scrabble letter values, multiplied by the number of surfaces the word
+// spans: a word joined across two strips scores double, three triple.
+function scoreWord(game, span, placed) {
+  const letters = span.slots.reduce((sum, key) => sum + LETTER_VALUES[letterAt(game, key)], 0);
+  const bingo = placed.length === RACK_SIZE ? BINGO : 0;
+  return { letters, surfaces: span.surfaces, bingo, total: letters * span.surfaces + bingo };
 }
 
 // A loop has no ends, so a word on it may run past any point. Cutting the
