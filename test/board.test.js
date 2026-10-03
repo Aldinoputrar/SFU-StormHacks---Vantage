@@ -110,6 +110,21 @@ test('words are scored by letter values times the surfaces they span', () => {
   for (const [i, letter] of [[3, 'C'], [4, 'A'], [5, 'N']]) placeTile(game, chain.slots[i], game.rack.indexOf(letter));
   assert.match(playWord(game, chain, ISO, () => false).error, /dictionary/);
   const { points } = playWord(game, chain, ISO, anyWord);
-  assert.deepEqual(points, { letters: 5, surfaces: 2, bingo: 0, total: 10 });
+  assert.deepEqual(points, { letters: 5, wordMultiplier: 1, surfaces: 2, bingo: 0, bonuses: [], total: 10 });
   assert.equal(game.score, 10);
+});
+
+test('a bonus square counts only from the viewpoint that reveals it', () => {
+  const tripleWord = slotKey([9, 0, 3], '+z'); // 3x word, revealed from (1, 1, 1)
+  const play = (viewDir) => {
+    const game = createGame(BROKEN_CUBE, board);
+    const chain = chainsForView(board, ISO).chains.find((c) => c.slots.includes(tripleWord) && c.slots.length === 8);
+    const at = chain.slots.indexOf(tripleWord);
+    game.rack = ['A', 'T', 'E', 'E', 'E', 'E', 'E'];
+    placeTile(game, chain.slots[at], 0);
+    placeTile(game, chain.slots[at + 1], 0);
+    return playWord(game, chain, viewDir, anyWord).points;
+  };
+  assert.equal(play(ISO).total, 2 * 3);
+  assert.equal(play(normalize([1, 1, 1.2])).total, 2);
 });

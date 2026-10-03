@@ -51,6 +51,8 @@ Some double and triple bonus markers are painted across several surfaces, like a
 - From the right spot, the fragments resolve into a readable bonus, such as **3x WORD**.
 - You earn the bonus only when your word uses that square from the viewpoint that reveals it.
 
+Each marker is cut into shards, and each shard is pushed a different distance along the marker's viewing direction. The orthographic camera ignores movement along its own direction, so only from that viewpoint do the shards reassemble into the label ([`src/anamorph.js`](src/anamorph.js)).
+
 Exploration is free, so take time to look for opportunities before spending a turn.
 
 ## Scoring
@@ -143,5 +145,5 @@ npm run vantages  # list the vantage points in the level
 - [x] Reveal mode that shows the real gaps behind joined lines
 - [x] Checking words and scoring
 - [ ] Rotating parts of the structure
-- [ ] Hidden bonus squares
+- [x] Hidden bonus squares
 - [ ] More structures: an Escher-style tower, and a small planet with words that curve over the horizon

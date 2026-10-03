@@ -1,9 +1,16 @@
-import { add, scale } from './geometry.js';
-import { slotKey } from './board.js';
+import { add, angleBetween, normalize, scale } from './geometry.js';
+import { ALIGN_TOLERANCE, slotKey, slotVisible } from './board.js';
 import { LETTER_VALUES, TILE_COUNTS } from './level.js';
 
 export const RACK_SIZE = 7;
 export const BINGO = 50; // for using all seven tiles in one word, as in Scrabble
+
+export const BONUS_KINDS = {
+  DL: { letter: 2, word: 1, label: '2× LETTER' },
+  TL: { letter: 3, word: 1, label: '3× LETTER' },
+  DW: { letter: 1, word: 2, label: '2× WORD' },
+  TW: { letter: 1, word: 3, label: '3× WORD' },
+};
 
 // Small seeded PRNG so every player of a challenge draws the same tiles.
 function mulberry32(seed) {
@@ -38,7 +45,18 @@ export function createGame(level, board) {
     });
   }
 
+  // Bonus squares only count when played from the viewpoint that reveals them.
+  const bonuses = (level.bonuses ?? []).map(({ cell, face, kind, view }) => {
+    const slot = slotKey(cell, face);
+    const dir = normalize(view);
+    if (!board.slots.has(slot) || !slotVisible(board, slot, dir)) {
+      throw new Error(`Bonus ${kind} at ${slot} cannot be seen from its viewpoint`);
+    }
+    return { slot, kind, dir };
+  });
+
   const game = {
+    bonuses,
     letters, // slot key -> committed letter
     pending: [], // tiles placed this turn: { slot, letter }
     rack: [],
@@ -98,7 +116,7 @@ export function playWord(game, chain, viewDir, isWord) {
   if (!isWord(span.word)) return { error: `${span.word} isn't in the dictionary.` };
 
   const placed = game.pending;
-  const points = scoreWord(game, span, placed);
+  const points = scoreWord(game, span, placed, viewDir);
   for (const tile of placed) game.letters.set(tile.slot, tile.letter);
   game.pending = [];
   game.history.push({ type: 'word', view: viewDir, slots: span.slots, placed, word: span.word, points });
@@ -108,12 +126,33 @@ export function playWord(game, chain, viewDir, isWord) {
   return { ...span, placed, points };
 }
 
-// Scrabble letter values, multiplied by the number of surfaces the word
-// spans: a word joined across two strips scores double, three triple.
-function scoreWord(game, span, placed) {
-  const letters = span.slots.reduce((sum, key) => sum + LETTER_VALUES[letterAt(game, key)], 0);
+// Bonuses revealed from viewDir, by slot.
+export function activeBonuses(game, viewDir) {
+  const active = new Map();
+  for (const bonus of game.bonuses) {
+    if (angleBetween(bonus.dir, viewDir) <= ALIGN_TOLERANCE) active.set(bonus.slot, bonus.kind);
+  }
+  return active;
+}
+
+// Scrabble scoring: letter values, with bonus squares counting only under
+// newly placed tiles. The total is then multiplied by the number of surfaces
+// the word spans, so a word joined across two strips scores double.
+function scoreWord(game, span, placed, viewDir) {
+  const active = activeBonuses(game, viewDir);
+  const fresh = new Set(placed.map((tile) => tile.slot));
+  const used = span.slots.filter((key) => fresh.has(key) && active.has(key)).map((key) => active.get(key));
+
+  let letters = 0;
+  let wordMultiplier = 1;
+  for (const key of span.slots) {
+    const bonus = fresh.has(key) && active.has(key) ? BONUS_KINDS[active.get(key)] : null;
+    letters += LETTER_VALUES[letterAt(game, key)] * (bonus?.letter ?? 1);
+    wordMultiplier *= bonus?.word ?? 1;
+  }
   const bingo = placed.length === RACK_SIZE ? BINGO : 0;
-  return { letters, surfaces: span.surfaces, bingo, total: letters * span.surfaces + bingo };
+  const total = letters * wordMultiplier * span.surfaces + bingo;
+  return { letters, wordMultiplier, surfaces: span.surfaces, bingo, bonuses: used, total };
 }
 
 // A loop has no ends, so a word on it may run past any point. Cutting the

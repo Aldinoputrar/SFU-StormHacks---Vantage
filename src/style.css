@@ -181,6 +181,11 @@ kbd {
   color: var(--pending-ink);
 }
 
+#pattern .bonus {
+  background: #f5c2c9;
+  border-color: #d1495b;
+}
+
 #pattern .cursor {
   outline: 2px solid var(--accent);
   outline-offset: 1px;

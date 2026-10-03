@@ -166,6 +166,8 @@ function slotsVisible(board, keys, dir) {
   });
 }
 
+export const slotVisible = (board, key, dir) => slotsVisible(board, [key], dir);
+
 function findJoins(board) {
   const ends = board.lines.flatMap((line) => lineEnds(board, line));
   const joins = [];
