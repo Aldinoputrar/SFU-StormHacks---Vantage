@@ -71,6 +71,11 @@ kbd {
   color: var(--muted);
 }
 
+#view-buttons {
+  display: flex;
+  gap: 6px;
+}
+
 #stats {
   position: fixed;
   top: 16px;

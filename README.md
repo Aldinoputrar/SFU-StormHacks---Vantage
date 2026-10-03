@@ -20,6 +20,12 @@ An orthographic camera lets surfaces at different depths appear to touch without
 
 Every face of every block can hold letters: tops, sides and undersides. Each face is a small Scrabble board, and a word can run along the top of one ledge and carry on along the side of another. Words read left to right (or top to bottom) as they appear from where you stand.
 
+## Impossible loops
+
+The Penrose stairs are four strips set around a square, each lifted a different amount along the isometric direction (1, 1, 1). From the isometric viewpoint those lifts vanish and the strips close into one ring of 16 tiles with no start and no end, so a word can run around a corner and past any point. Orbit away and the ring opens into a spiral staircase that climbs two floors, yet still returns to where it started.
+
+**Reveal the trick** swings the camera away from a vantage point and back, with dashed lines across every hidden gap, so you can see how far apart the joined strips really are.
+
 ## How to play
 
 Start a solo run with a rack of seven letters and a fixed turn budget. Aim for the highest total score before your turns run out.
@@ -123,6 +129,7 @@ npm run vantages  # list the vantage points in the level
 - **Drag** to orbit, **scroll** to zoom. Let go near a vantage point and the camera snaps to it; joined lines glow.
 - **Click a tile** to lock the view and pick the line through it. Click the same tile again to switch to the other line through it.
 - **Type** letters (or tap your rack) to place them along the line, **Backspace** to undo, **Enter** to play, **Esc** to cancel.
+- **Reveal the trick** shows the real 3D gaps behind the lines joined at the current vantage point.
 
 ## Roadmap
 
@@ -131,6 +138,8 @@ npm run vantages  # list the vantage points in the level
 - [x] Highlighting lines that are lined up on screen
 - [x] Letters on every face of every block
 - [x] Locking the view and placing tiles
+- [x] Penrose-stairs loop that words can wrap around
+- [x] Reveal mode that shows the real gaps behind joined lines
 - [ ] Checking words and scoring
 - [ ] Rotating parts of the structure
 - [ ] Hidden bonus squares

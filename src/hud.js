@@ -24,18 +24,19 @@ function patternTile({ letter, pending, cursor, joint }) {
   return span;
 }
 
-export function createHud({ onRack, onPlay, onUndo, onCancel, onIso }) {
+export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal }) {
   $('play').addEventListener('click', onPlay);
   $('undo').addEventListener('click', onUndo);
   $('cancel').addEventListener('click', onCancel);
   $('iso').addEventListener('click', onIso);
+  $('reveal').addEventListener('click', onReveal);
   $('rack').addEventListener('click', (event) => {
     const tile = event.target.closest('[data-index]');
     if (tile) onRack(Number(tile.dataset.index));
   });
 
   return {
-    render({ game, placing, headline, hint, pattern, message }) {
+    render({ game, placing, canReveal, headline, hint, pattern, message }) {
       $('turns').textContent = game.turnsLeft;
       $('bag').textContent = game.bag.length;
       $('rack').replaceChildren(...game.rack.map(rackTile));
@@ -43,6 +44,7 @@ export function createHud({ onRack, onPlay, onUndo, onCancel, onIso }) {
       $('play').disabled = !game.pending.length;
       $('undo').disabled = !game.pending.length;
       $('cancel').disabled = !placing;
+      $('reveal').disabled = !canReveal;
       $('headline').textContent = headline;
       $('hint').textContent = hint;
       $('pattern').hidden = !pattern;

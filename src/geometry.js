@@ -61,10 +61,14 @@ export function rayHitsVoxel(origin, dir, isSolid, maxDistance = 64) {
   let t = 0;
   while (t <= maxDistance) {
     if (isSolid(cell[0], cell[1], cell[2])) return true;
-    const axis = tMax[0] < tMax[1] ? (tMax[0] < tMax[2] ? 0 : 2) : tMax[1] < tMax[2] ? 1 : 2;
-    t = tMax[axis];
-    cell[axis] += step[axis];
-    tMax[axis] += tDelta[axis];
+    t = Math.min(...tMax);
+    // Crossing two boundaries at once means the ray only grazes the edge
+    // between voxels, so step through both instead of visiting either side.
+    for (let i = 0; i < 3; i++) {
+      if (tMax[i] - t > 1e-9) continue;
+      cell[i] += step[i];
+      tMax[i] += tDelta[i];
+    }
   }
   return false;
 }

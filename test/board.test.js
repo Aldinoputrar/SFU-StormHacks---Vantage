@@ -65,3 +65,19 @@ test('tiles must not leave gaps', () => {
   assert.equal(game.rack.length, 7);
   assert.equal(game.turnsLeft, BROKEN_CUBE.turns - 1);
 });
+
+test('the Penrose stairs close into a loop only from the isometric view', () => {
+  const loop = chainsForView(board, ISO).chains.find((chain) => chain.cyclic);
+  assert.equal(loop?.slots.length, 16);
+  assert.ok(!chainsForView(board, normalize([1, 1, 0.8])).chains.some((chain) => chain.cyclic));
+});
+
+test('a word on the loop can wrap past where the loop was declared to start', () => {
+  const game = createGame(BROKEN_CUBE, board);
+  const loop = chainsForView(board, ISO).chains.find((chain) => chain.cyclic);
+  const n = loop.slots.length;
+  const rackTiles = game.rack.slice(0, 3).join('');
+  for (const i of [n - 1, 0, 1]) placeTile(game, loop.slots[i], 0);
+  const result = playWord(game, loop, ISO);
+  assert.equal(result.word, rackTiles);
+});

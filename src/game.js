@@ -83,27 +83,53 @@ export function cancelPending(game) {
 // Dictionary checks and scoring come next; this enforces placement only.
 export function playWord(game, chain, viewDir) {
   if (!game.pending.length) return { error: 'Place at least one tile first.' };
-  const positions = game.pending.map((tile) => chain.slots.indexOf(tile.slot));
-  if (positions.includes(-1)) return { error: 'All your tiles must be on the selected line.' };
-
-  let start = Math.min(...positions);
-  let end = Math.max(...positions);
-  for (let i = start; i <= end; i++) {
-    if (!letterAt(game, chain.slots[i])) return { error: 'Leave no gaps between your tiles.' };
+  if (game.pending.some((tile) => !chain.slots.includes(tile.slot))) {
+    return { error: 'All your tiles must be on the selected line.' };
   }
-  while (start > 0 && letterAt(game, chain.slots[start - 1])) start--;
-  while (end < chain.slots.length - 1 && letterAt(game, chain.slots[end + 1])) end++;
 
-  const slots = chain.slots.slice(start, end + 1);
-  const word = slots.map((key) => letterAt(game, key)).join('');
-  if (word.length < 2) return { error: 'Words need at least two letters.' };
-  const surfaces = new Set(chain.slotLines.slice(start, end + 1)).size;
+  let span;
+  for (const line of unroll(game, chain)) {
+    span = findSpan(game, line);
+    if (!span.error) break;
+  }
+  if (span.error) return span;
 
   const placed = game.pending;
   for (const tile of placed) game.letters.set(tile.slot, tile.letter);
   game.pending = [];
-  game.history.push({ type: 'word', view: viewDir, slots, placed, word });
+  game.history.push({ type: 'word', view: viewDir, slots: span.slots, placed, word: span.word });
   game.turnsLeft--;
   refillRack(game);
-  return { word, surfaces, placed };
+  return { ...span, placed };
+}
+
+// A loop has no ends, so a word on it may run past any point. Cutting the
+// loop just after each empty slot gives the straight lines a word could lie
+// on; a full loop is cut at the first new tile.
+function unroll(game, chain) {
+  if (!chain.cyclic) return [chain];
+  const n = chain.slots.length;
+  const cuts = chain.slots.flatMap((key, i) => (letterAt(game, key) ? [] : [(i + 1) % n]));
+  if (!cuts.length) cuts.push(chain.slots.indexOf(game.pending[0].slot));
+  return cuts.map((cut) => {
+    const order = Array.from({ length: n }, (_, k) => (cut + k) % n);
+    return { slots: order.map((i) => chain.slots[i]), slotLines: order.map((i) => chain.slotLines[i]) };
+  });
+}
+
+// The word made by this turn's tiles on a straight line, or an error.
+function findSpan(game, line) {
+  const positions = game.pending.map((tile) => line.slots.indexOf(tile.slot));
+  let start = Math.min(...positions);
+  let end = Math.max(...positions);
+  for (let i = start; i <= end; i++) {
+    if (!letterAt(game, line.slots[i])) return { error: 'Leave no gaps between your tiles.' };
+  }
+  while (start > 0 && letterAt(game, line.slots[start - 1])) start--;
+  while (end < line.slots.length - 1 && letterAt(game, line.slots[end + 1])) end++;
+
+  const slots = line.slots.slice(start, end + 1);
+  const word = slots.map((key) => letterAt(game, key)).join('');
+  if (word.length < 2) return { error: 'Words need at least two letters.' };
+  return { slots, word, surfaces: new Set(line.slotLines.slice(start, end + 1)).size };
 }

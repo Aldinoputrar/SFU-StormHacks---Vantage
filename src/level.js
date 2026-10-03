@@ -9,6 +9,31 @@ export const TILE_COUNTS = {
   N: 6, O: 8, P: 2, Q: 1, R: 6, S: 4, T: 6, U: 4, V: 2, W: 2, X: 1, Y: 2, Z: 1,
 };
 
+// Penrose stairs: a square ring of strips where each side is lifted along
+// (1, 1, 1). The lifts are invisible from the isometric viewpoint, so the ring
+// looks closed there and a word can run around it forever; from anywhere else
+// it is an open spiral that climbs two floors. The last side has to step back
+// down somewhere, and it does so where it would otherwise hide a tile (the
+// same cheat Penrose's drawing makes).
+function penroseLoop(origin, size, lifts = [0, 1, 2, 2]) {
+  const sides = [
+    { from: [0, 0, 0], dir: [1, 0, 0], length: size },
+    { from: [size - 1, 0, 1], dir: [0, 0, 1], length: size - 1 },
+    { from: [size - 2, 0, size - 1], dir: [-1, 0, 0], length: size - 1 },
+    { from: [0, 0, size - 2], dir: [0, 0, -1], length: size - 2 },
+  ];
+  const blocks = [];
+  const path = [];
+  sides.forEach(({ from, dir, length }, side) => {
+    const start = from.map((v, i) => origin[i] + v + lifts[side]);
+    blocks.push({ start, dir, length });
+    for (let i = 0; i < length; i++) path.push(start.map((v, j) => v + dir[j] * i));
+  });
+  return { blocks, loop: { view: [1, 1, 1], face: '+y', path } };
+}
+
+const STAIRS = penroseLoop([-9, -4, 6], 5);
+
 // The broken cube. Blocks are listed as straight runs of unit cubes; every
 // exposed face of every block can hold a letter. Run `npm run vantages` to
 // list the viewpoints where lines join.
@@ -34,7 +59,10 @@ export const BROKEN_CUBE = {
     { start: [1, 1, -1], dir: [0, 0, -1], length: 4 }, // joins rise from (1, 1, -1)
     { start: [0, 3, 3], dir: [-1, 0, 0], length: 4 }, // joins top from (0, 1, 1)
     { start: [6, 8, 4], dir: [1, 0, 0], length: 4 }, // joins top from (0, 1, -1)
+    ...STAIRS.blocks,
   ],
+  // Closed rings of tiles, each seen as one from a single viewpoint.
+  loops: [STAIRS.loop],
   // Letters already on the board. Each text runs from start along dir, on the
   // given face of each block; spaces are left empty.
   words: [

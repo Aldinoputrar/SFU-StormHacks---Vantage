@@ -10,6 +10,8 @@ const SNAP_ANGLE = THREE.MathUtils.degToRad(10); // release this close to a vant
 const HINT_ANGLE = THREE.MathUtils.degToRad(20);
 const SNAP_MS = 350;
 const ISOMETRIC = [1, 1, 1];
+const REVEAL_TURN = THREE.MathUtils.degToRad(40); // how far reveal swings the camera
+const REVEAL_HOLD_MS = 1200;
 
 const board = buildBoard(BROKEN_CUBE);
 const game = createGame(BROKEN_CUBE, board);
@@ -63,6 +65,7 @@ let current = chainsForView(board, viewDir()); // every line, as seen from the c
 let selection = null; // { chain, cursor } while placing
 let lockedDir = null;
 let snap = null;
+let revealing = false; // showing how far apart joined strips really are
 let message = null;
 let messageTimer;
 
@@ -71,7 +74,18 @@ const hud = createHud({
   onPlay: play,
   onUndo: undo,
   onCancel: exitPlacing,
-  onIso: () => mode === 'explore' && !snap && animateTo(ISOMETRIC),
+  onIso: () => mode === 'explore' && !snap && !revealing && animateTo(ISOMETRIC),
+  onReveal: reveal,
+});
+
+// Dashed lines across each hidden gap, drawn while revealing.
+const ghosts = new THREE.Group();
+scene.add(ghosts);
+const ghostMaterial = new THREE.LineDashedMaterial({
+  color: '#1fbfae',
+  dashSize: 0.25,
+  gapSize: 0.15,
+  depthTest: false,
 });
 
 function setMessage(text, tone = 'info') {
@@ -85,7 +99,7 @@ function setMessage(text, tone = 'info') {
 }
 
 function refresh() {
-  if (mode !== 'placing') current = chainsForView(board, viewDir());
+  if (mode !== 'placing' && !revealing) current = chainsForView(board, viewDir());
   view.orientLetters(camera);
 
   const highlights = new Map();
@@ -106,13 +120,18 @@ function renderHud() {
   let hint = '';
   let pattern = null;
 
-  if (mode === 'over') {
+  if (revealing) {
+    headline = 'Behind the illusion';
+    hint = 'The dashed lines show how far apart the joined strips really are';
+  } else if (mode === 'over') {
     headline = 'Run complete';
     hint = `You played ${game.history.length} words. Orbit around to admire them.`;
   } else if (mode === 'placing' && selection) {
     const { chain } = selection;
     const surfaces = new Set(chain.slotLines).size;
-    headline = `Line of ${chain.slots.length} tiles${surfaces > 1 ? ` across ${surfaces} surfaces` : ''}`;
+    headline = chain.cyclic
+      ? `Endless loop of ${chain.slots.length} tiles: words can wrap around`
+      : `Line of ${chain.slots.length} tiles${surfaces > 1 ? ` across ${surfaces} surfaces` : ''}`;
     hint = 'Type or tap letters · Enter to play · Backspace to undo · Esc to cancel';
     pattern = chain.slots.map((key, i) => ({
       letter: letterAt(game, key),
@@ -124,18 +143,21 @@ function renderHud() {
     headline = 'View locked';
     hint = 'Click a tile to choose a line · Esc to unlock';
   } else {
-    const joined = current.chains.filter(isJoined).length;
+    const joined = current.chains.filter(isJoined);
     const near = nearestVantage(board, viewDir());
-    if (joined) {
-      headline = `Vantage point! ${joined} hidden line${joined > 1 ? 's' : ''} joined`;
-      hint = 'Click a glowing tile to play along it';
+    if (joined.length) {
+      const loops = joined.filter((chain) => chain.cyclic).length;
+      headline = `Vantage point! ${joined.length} hidden line${joined.length > 1 ? 's' : ''} joined`;
+      if (loops) headline += `, including an endless loop`;
+      hint = 'Click a glowing tile to play along it · Reveal to see the trick';
     } else {
       headline = near && near.angle < HINT_ANGLE ? 'Something lines up nearby…' : 'Find where the strips line up';
       hint = 'Drag to orbit · Click any tile to start a word';
     }
   }
 
-  hud.render({ game, placing: mode === 'placing', headline, hint, pattern, message });
+  const canReveal = !revealing && !snap && current.chains.some(isJoined);
+  hud.render({ game, placing: mode === 'placing', canReveal, headline, hint, pattern, message });
 }
 
 // Swings the camera around the target to look from dir.
@@ -161,7 +183,7 @@ function stepSnap(now) {
   if (t === 1) {
     const { then } = snap;
     snap = null;
-    controls.enabled = mode !== 'placing';
+    controls.enabled = mode !== 'placing' && !revealing;
     then?.();
   }
   refresh();
@@ -183,8 +205,48 @@ controls.addEventListener('end', () => {
   if (dragged && mode === 'explore') snapIfNear();
 });
 
+// Swings the camera away from the vantage point and back, with dashed lines
+// across every hidden gap, so the player sees the strips come apart.
+function reveal() {
+  const joined = current.chains.filter(isJoined);
+  if (snap || revealing || !joined.length) return;
+  revealing = true;
+  for (const chain of joined) drawGhosts(chain);
+  const home = viewDir();
+  const away = new THREE.Vector3(...home).applyAxisAngle(new THREE.Vector3(0, 1, 0), REVEAL_TURN).toArray();
+  animateTo(away, () =>
+    setTimeout(
+      () =>
+        animateTo(home, () => {
+          revealing = false;
+          ghosts.clear();
+          controls.enabled = mode !== 'placing';
+          refresh();
+        }),
+      REVEAL_HOLD_MS,
+    ),
+  );
+  refresh();
+}
+
+function drawGhosts(chain) {
+  const n = chain.slots.length;
+  for (let i = 0; i < (chain.cyclic ? n : n - 1); i++) {
+    const j = (i + 1) % n;
+    if (chain.slotLines[i] === chain.slotLines[j]) continue;
+    const ends = [chain.slots[i], chain.slots[j]].map((key) => {
+      const slot = board.slots.get(key);
+      return new THREE.Vector3(...slot.center).addScaledVector(new THREE.Vector3(...slot.normal), 0.1);
+    });
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(ends), ghostMaterial);
+    line.computeLineDistances();
+    line.renderOrder = 1;
+    ghosts.add(line);
+  }
+}
+
 function lockView(key) {
-  if (mode !== 'explore' || snap) return;
+  if (mode !== 'explore' || snap || revealing) return;
   snapIfNear(() => {
     mode = 'placing';
     controls.enabled = false;
@@ -221,9 +283,14 @@ function selectSlot(key, toggle = false) {
   refresh();
 }
 
+// The first empty slot at or after from; loops wrap around.
 function nextEmpty(from) {
-  const { slots } = selection.chain;
-  for (let i = from; i < slots.length; i++) if (!letterAt(game, slots[i])) return i;
+  const { slots, cyclic } = selection.chain;
+  for (let k = 0; k < slots.length; k++) {
+    const i = cyclic ? (from + k) % slots.length : from + k;
+    if (i >= slots.length) break;
+    if (!letterAt(game, slots[i])) return i;
+  }
   return -1;
 }
 
@@ -278,7 +345,7 @@ const raycaster = new THREE.Raycaster();
 const pointerDown = new THREE.Vector2();
 renderer.domElement.addEventListener('pointerdown', (event) => pointerDown.set(event.clientX, event.clientY));
 renderer.domElement.addEventListener('pointerup', (event) => {
-  if (snap || pointerDown.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 6) return;
+  if (snap || revealing || pointerDown.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 6) return;
   const ndc = new THREE.Vector2(
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1,

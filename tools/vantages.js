@@ -22,7 +22,7 @@ for (const vantage of board.vantages) {
   const joined = chainsForView(board, vantage.dir).chains.filter(isJoined);
   console.log(label(vantage.dir));
   for (const chain of joined) {
-    const parts = chain.lines.map((id) => describe(board.lines[id])).join(' + ');
+    const parts = chain.cyclic ? 'closed loop' : chain.lines.map((id) => describe(board.lines[id])).join(' + ');
     console.log(`  ${chain.slots.length} tiles: ${parts}`);
   }
 }

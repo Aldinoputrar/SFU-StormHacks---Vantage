@@ -95,6 +95,7 @@ export function buildBoard(level) {
 
   const board = { cells, isSolid, slots, lines };
   board.joins = findJoins(board);
+  board.loops = (level.loops ?? []).map((loop, i) => buildLoop(board, loop, i));
   board.vantages = findVantages(board);
   return board;
 }
@@ -152,9 +153,9 @@ function isSymmetryDirection(d) {
   });
 }
 
-// True when nothing blocks the view of any tile on the line from direction dir.
-function lineVisible(board, line, dir) {
-  return line.slots.every((key) => {
+// True when nothing blocks the view of any of the tiles from direction dir.
+function slotsVisible(board, keys, dir) {
+  return keys.every((key) => {
     const slot = board.slots.get(key);
     const origin = add(slot.center, scale(slot.normal, 0.01));
     return !rayHitsVoxel(origin, dir, board.isSolid);
@@ -172,26 +173,53 @@ function findJoins(board) {
       const b = ends[j];
       if (a.line === b.line) continue;
       const dir = joinDirection(a, b);
-      if (!dir || !lineVisible(board, a.line, dir) || !lineVisible(board, b.line, dir)) continue;
+      if (!dir || !slotsVisible(board, a.line.slots, dir) || !slotsVisible(board, b.line.slots, dir)) continue;
       joins.push({ a: { line: a.line.id, end: a.end }, b: { line: b.line.id, end: b.end }, dir });
     }
   }
   return joins;
 }
 
-// Vantage points: the view directions where lines join. The camera snaps to
-// these.
+// A loop is a closed path of slots that, seen from its viewpoint, steps one
+// tile at a time all the way round, including from the last slot back to the
+// first. Levels declare loops; this checks the geometry really closes.
+function buildLoop(board, loop, index) {
+  const dir = normalize(loop.view);
+  const slots = loop.path.map((cell) => slotKey(cell, loop.face));
+  const missing = slots.find((key) => !board.slots.has(key));
+  if (missing) throw new Error(`Loop ${index} has no slot at ${missing}`);
+
+  const slotLines = [];
+  let segment = 0;
+  slots.forEach((key, i) => {
+    const slot = board.slots.get(key);
+    const step = sub(board.slots.get(slots[(i + 1) % slots.length]).center, slot.center);
+    const oneTile = slot.axes.some((axis) =>
+      [1, -1].some((sign) => length(onScreen(sub(step, scale(axis, sign)), dir)) < 1e-6),
+    );
+    if (!oneTile) throw new Error(`Loop ${index} does not close on screen after ${key}`);
+    slotLines.push(`loop${index}:${segment}`);
+    if (Math.abs(length(step) - 1) > 1e-6) segment++; // the next side floats elsewhere
+  });
+  if (!slotsVisible(board, slots, dir)) throw new Error(`Loop ${index} is hidden from its viewpoint`);
+  return { dir, slots, slotLines };
+}
+
+// Vantage points: the view directions where lines join or loops close. The
+// camera snaps to these.
 function findVantages(board) {
   const groups = new Map();
-  for (const join of board.joins) {
-    const key = join.dir.map((v) => v.toFixed(5)).join(',');
-    if (!groups.has(key)) groups.set(key, { dir: join.dir, joins: [] });
-    groups.get(key).joins.push(join);
-  }
+  const group = (dir) => {
+    const key = dir.map((v) => v.toFixed(5)).join(',');
+    if (!groups.has(key)) groups.set(key, { dir, joins: [] });
+    return groups.get(key);
+  };
+  for (const join of board.joins) group(join.dir).joins.push(join);
+  for (const loop of board.loops) group(loop.dir);
   return [...groups.values()];
 }
 
-export const isJoined = (chain) => chain.lines.length > 1;
+export const isJoined = (chain) => chain.cyclic || chain.lines.length > 1;
 
 // Every line on the board as seen from viewDir, with lines that line up on
 // screen merged into chains. Each chain's slots are in reading order.
@@ -201,7 +229,8 @@ export function chainsForView(board, viewDir, tolerance = ALIGN_TOLERANCE) {
     .filter(({ error }) => error <= tolerance)
     .sort((p, q) => p.error - q.error)
     .map(({ join }) => join);
-  return buildChains(board, active, viewDir);
+  const loops = board.loops.filter((loop) => angleBetween(loop.dir, viewDir) <= tolerance);
+  return buildChains(board, active, viewDir, loops);
 }
 
 export function nearestVantage(board, viewDir) {
@@ -213,7 +242,7 @@ export function nearestVantage(board, viewDir) {
   return best;
 }
 
-function buildChains(board, joins, viewDir) {
+function buildChains(board, joins, viewDir, loops = []) {
   const endKey = (line, end) => `${line}:${end}`;
   const partner = new Map();
   for (const { a, b } of joins) {
@@ -254,6 +283,9 @@ function buildChains(board, joins, viewDir) {
   for (const line of board.lines) {
     if (!visited.has(line.id)) chains.push(walk(line, 0));
   }
+  for (const loop of loops) {
+    chains.push(orientLoop(board, { lines: [], slots: loop.slots, slotLines: loop.slotLines, cyclic: true }, viewDir));
+  }
 
   const bySlot = new Map();
   chains.forEach((chain, id) => {
@@ -264,6 +296,22 @@ function buildChains(board, joins, viewDir) {
     }
   });
   return { chains, bySlot };
+}
+
+// Loops read clockwise on screen.
+function orientLoop(board, chain, viewDir) {
+  const { right, up } = screenBasis(viewDir);
+  const points = chain.slots.map((key) => {
+    const center = board.slots.get(key).center;
+    return [dot(center, right), dot(center, up)];
+  });
+  let area = 0;
+  points.forEach(([x1, y1], i) => {
+    const [x2, y2] = points[(i + 1) % points.length];
+    area += x1 * y2 - x2 * y1;
+  });
+  if (area < 0) return chain;
+  return { ...chain, slots: [...chain.slots].reverse(), slotLines: [...chain.slotLines].reverse() };
 }
 
 // Words read left to right on screen, or top to bottom when nearly vertical.
