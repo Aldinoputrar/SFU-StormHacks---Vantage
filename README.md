@@ -22,7 +22,7 @@ Every face of every block can hold letters: tops, sides and undersides. Each fac
 
 ## Impossible loops
 
-The Penrose stairs are four strips set around a square, each lifted a different amount along the isometric direction (1, 1, 1). From the isometric viewpoint those lifts vanish and the strips close into one ring of 16 tiles with no start and no end, so a word can run around a corner and past any point. Orbit away and the ring opens into a spiral staircase that climbs two floors, yet still returns to where it started.
+The Penrose stairs are four strips set around a square, each lifted a different amount along the isometric direction (1, 1, 1). From the isometric viewpoint those lifts vanish and the strips close into one ring of 16 tiles with no start and no end, so a word can run around a corner and past any point. Orbit away and the ring opens into a staircase: walk it one way and you climb a floor at three corners, yet still arrive back where you started.
 
 **Reveal the trick** swings the camera away from a vantage point and back, with dashed lines across every hidden gap, so you can see how far apart the joined strips really are.
 

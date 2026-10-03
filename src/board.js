@@ -154,11 +154,17 @@ function isSymmetryDirection(d) {
 }
 
 // True when nothing blocks the view of any of the tiles from direction dir.
+// Each tile is checked at its centre and near its four corners, so a tile
+// half hidden behind a pillar counts as hidden.
 function slotsVisible(board, keys, dir) {
   return keys.every((key) => {
-    const slot = board.slots.get(key);
-    const origin = add(slot.center, scale(slot.normal, 0.01));
-    return !rayHitsVoxel(origin, dir, board.isSolid);
+    const { center, normal, axes } = board.slots.get(key);
+    const lifted = add(center, scale(normal, 0.01));
+    const samples = [lifted];
+    for (const u of [-0.4, 0.4]) {
+      for (const v of [-0.4, 0.4]) samples.push(add(lifted, add(scale(axes[0], u), scale(axes[1], v))));
+    }
+    return samples.every((origin) => !rayHitsVoxel(origin, dir, board.isSolid));
   });
 }
 

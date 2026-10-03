@@ -11,11 +11,12 @@ export const TILE_COUNTS = {
 
 // Penrose stairs: a square ring of strips where each side is lifted along
 // (1, 1, 1). The lifts are invisible from the isometric viewpoint, so the ring
-// looks closed there and a word can run around it forever; from anywhere else
-// it is an open spiral that climbs two floors. The last side has to step back
-// down somewhere, and it does so where it would otherwise hide a tile (the
-// same cheat Penrose's drawing makes).
-function penroseLoop(origin, size, lifts = [0, 1, 2, 2]) {
+// looks closed there and a word can run around it forever. From anywhere else
+// it is an open spiral: walk it one way and you climb a floor at three
+// corners, yet arrive back where you started. The fourth corner hides the
+// drop, the same cheat Penrose's drawing makes. These lifts are ones where no
+// side covers a tile of another from the isometric view.
+function penroseLoop(origin, size, lifts = [0, 3, 2, 1]) {
   const sides = [
     { from: [0, 0, 0], dir: [1, 0, 0], length: size },
     { from: [size - 1, 0, 1], dir: [0, 0, 1], length: size - 1 },
