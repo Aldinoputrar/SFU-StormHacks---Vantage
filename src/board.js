@@ -220,15 +220,44 @@ function findVantages(board) {
 export const isJoined = (chain) => chain.cyclic || chain.lines.length > 1;
 
 // Every line on the board as seen from viewDir, with lines that line up on
-// screen merged into chains. Each chain's slots are in reading order.
-export function chainsForView(board, viewDir, tolerance = ALIGN_TOLERANCE) {
+// screen merged into chains. Each chain's slots are in reading order. With
+// visibleOnly, tiles hidden from viewDir are cut out, splitting chains around
+// them, so players can only write where they can see.
+export function chainsForView(board, viewDir, tolerance = ALIGN_TOLERANCE, visibleOnly = false) {
   const active = board.joins
     .map((join) => ({ join, error: angleBetween(join.dir, viewDir) }))
     .filter(({ error }) => error <= tolerance)
     .sort((p, q) => p.error - q.error)
     .map(({ join }) => join);
   const loops = board.loops.filter((loop) => angleBetween(loop.dir, viewDir) <= tolerance);
-  return buildChains(board, active, viewDir, loops);
+  const view = buildChains(board, active, viewDir, loops);
+  return visibleOnly ? withoutHidden(board, view.chains, viewDir) : view;
+}
+
+function withoutHidden(board, chains, viewDir) {
+  const visible = (key) => {
+    const slot = board.slots.get(key);
+    return dot(slot.normal, viewDir) > 0.05 && slotsVisible(board, [key], viewDir);
+  };
+  const pieces = [];
+  for (const chain of chains) {
+    const shown = chain.slots.map(visible);
+    if (shown.every(Boolean)) {
+      pieces.push(chain);
+      continue;
+    }
+    let run = null;
+    chain.slots.forEach((key, i) => {
+      if (!shown[i]) {
+        run = null;
+        return;
+      }
+      if (!run) pieces.push((run = { lines: chain.lines, slots: [], slotLines: [] }));
+      run.slots.push(key);
+      run.slotLines.push(chain.slotLines[i]);
+    });
+  }
+  return indexChains(pieces);
 }
 
 export function nearestVantage(board, viewDir) {
@@ -285,6 +314,10 @@ function buildChains(board, joins, viewDir, loops = []) {
     chains.push(orientLoop(board, { lines: [], slots: loop.slots, slotLines: loop.slotLines, cyclic: true }, viewDir));
   }
 
+  return indexChains(chains);
+}
+
+function indexChains(chains) {
   const bySlot = new Map();
   chains.forEach((chain, id) => {
     chain.id = id;

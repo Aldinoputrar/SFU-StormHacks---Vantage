@@ -81,3 +81,13 @@ test('a word on the loop can wrap past where the loop was declared to start', ()
   const result = playWord(game, loop, ISO);
   assert.equal(result.word, rackTiles);
 });
+
+test('tiles hidden from the locked view are cut out of lines', () => {
+  // From straight above, the floating ledge at (0, 3, 3) covers the rise's
+  // tile at (0, 0, 3), so the rise's top line splits around it.
+  const above = normalize([0.001, 1, 0.001]);
+  const hidden = slotKey([0, 0, 3], '+y');
+  const { bySlot } = chainsForView(board, above, undefined, true);
+  assert.equal(bySlot.get(hidden), undefined);
+  assert.ok(bySlot.get(slotKey([0, 0, 2], '+y')).every((chain) => !chain.slots.includes(hidden)));
+});

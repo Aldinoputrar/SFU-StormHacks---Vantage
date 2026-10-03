@@ -66,7 +66,7 @@ const viewDir = () => camera.position.clone().sub(target).normalize().toArray();
 
 let mode = 'explore'; // 'explore' | 'placing' | 'over'
 let current = chainsForView(board, viewDir()); // every line, as seen from the camera
-let selection = null; // { chain, cursor } while placing
+let selection = null; // { chain, cursor, clicked } while placing
 let lockedDir = null;
 let snap = null;
 let revealing = false; // showing how far apart joined strips really are
@@ -255,7 +255,7 @@ function lockView(key) {
     mode = 'placing';
     controls.enabled = false;
     lockedDir = viewDir();
-    current = chainsForView(board, lockedDir);
+    current = chainsForView(board, lockedDir, undefined, true);
     selection = null;
     if (key) selectSlot(key);
     else refresh();
@@ -283,8 +283,18 @@ function selectSlot(key, toggle = false) {
     return;
   }
   const chain = toggle && selection ? options[(options.indexOf(selection.chain) + 1) % options.length] : options[0];
-  selection = { chain, cursor: chain.slots.indexOf(key) };
+  selection = { chain, cursor: 0, clicked: key };
+  selection.cursor = cursorFrom(chain.slots.indexOf(key));
   refresh();
+}
+
+// Where typing goes after choosing slot i: the first empty slot from there,
+// or the first one on the line if everything after i is full.
+function cursorFrom(i) {
+  const at = nextEmpty(i);
+  if (at !== -1) return at;
+  const first = nextEmpty(0);
+  return first === -1 ? selection.chain.slots.length : first;
 }
 
 // The first empty slot at or after from; loops wrap around.
@@ -362,10 +372,11 @@ renderer.domElement.addEventListener('pointerup', (event) => {
     lockView(key);
   } else if (mode === 'placing') {
     const slots = selection?.chain.slots ?? [];
-    if (key === slots[selection?.cursor] && !game.pending.length) {
+    if (key === selection?.clicked && !game.pending.length) {
       selectSlot(key, true);
     } else if (slots.includes(key)) {
-      selection.cursor = slots.indexOf(key);
+      selection.clicked = key;
+      selection.cursor = cursorFrom(slots.indexOf(key));
       refresh();
     } else if (game.pending.length) {
       setMessage('Play or cancel your word before choosing another line.', 'error');
