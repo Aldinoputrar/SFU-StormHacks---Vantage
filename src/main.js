@@ -765,7 +765,10 @@ muteButton.addEventListener('click', () => {
 });
 showMute();
 // Any interaction may start the audio; browsers refuse it before one.
-window.addEventListener('pointerdown', () => sound.unlock(), { once: true });
+const unlockAudio = () => sound.unlock();
+['pointerdown', 'click', 'keydown', 'touchstart'].forEach((evt) =>
+  window.addEventListener(evt, unlockAudio, { passive: true }),
+);
 
 refresh();
 let frame = 0;
