@@ -71,14 +71,15 @@ function penroseCrown(origin, size, lifts = [0, 3, 2, 1]) {
 
 const CROWN = penroseCrown([0, 7, 0], 4);
 
-// Reuse the home arm for a photograph: VANT and AGE are physically separate,
-// but their seven existing top faces meet from the home vantage point.
-export const THUMBNAIL_WORD = {
-  text: 'VANTAGE',
+// Two small title strips sit above the crown. Their top faces spell VANTAGE
+// from the home view, using exactly three VAN blocks and four TAGE blocks.
+export const TITLE_WORD = {
   face: '+y',
   view: VIEWS.southEast,
-  cells: [[1, 0, 1], [2, 0, 1], [3, 0, 1], [4, 0, 1], [6, 1, 2], [7, 1, 2], [8, 1, 2]],
-  blankCells: [[9, 1, 2]], // hide the final E of ABLE while photographing
+  parts: [
+    { start: [-1, 12, 0], dir: [1, 0, 0], text: 'VAN' },
+    { start: [3, 13, 1], dir: [1, 0, 0], text: 'TAGE' },
+  ],
 };
 
 // The monument: a lavender tower in the middle, the Penrose crown on top,
@@ -90,6 +91,7 @@ export const MONUMENT = {
   blocks: [
     { start: [0, 0, 0], dir: [0, 1, 0], length: 7, color: LAVENDER },
     ...CROWN.blocks,
+    ...TITLE_WORD.parts.map(({ start, dir, text }) => ({ start, dir, length: text.length, color: '#d5ab63' })),
     ...arm([1, 0, 1], [1, 0, 0], VIEWS.southEast),
     ...arm([1, 0, -1], [0, 0, -1], VIEWS.northEast),
     ...arm([-1, 0, -1], [-1, 0, 0], VIEWS.northWest),
@@ -105,6 +107,7 @@ export const MONUMENT = {
   // reads from the plaza out along its arm, so the far ends invite words that
   // finish there: LOVE...ABLE, ...RISE, ...STAR, ...TION.
   words: [
+    ...TITLE_WORD.parts.map((part) => ({ ...part, face: TITLE_WORD.face, featured: true })),
     { start: [6, 1, 2], dir: [1, 0, 0], face: '+y', text: 'ABLE' },
     { start: [2, 1, -6], dir: [0, 0, -1], face: '+y', text: 'RISE' },
     { start: [-6, 1, -2], dir: [-1, 0, 0], face: '+y', text: 'STAR' },

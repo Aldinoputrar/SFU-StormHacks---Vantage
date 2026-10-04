@@ -158,9 +158,7 @@ npm run build     # production build in dist/
 
 ### Taking a thumbnail
 
-Press **Thumbnail view** on the title screen or between turns. VANTAGE is spotlighted across seven existing tiles: VANT and AGE sit on separate strips and join from the home viewpoint. Drag to separate them and press **Join the word** to bring them together. Press **H** to hide the controls for a clean screenshot, and **Esc** to return. The playable board is restored when you leave.
-
-Open `/?thumbnail=1&clean=1` to go straight to the clean thumbnail view. No blocks are added.
+VANTAGE is permanently spotlighted above the crown during normal play. One three-block strip reads VAN and one four-block strip reads TAGE; from **Isometric view** they form the complete title. Use that normal game view for a project thumbnail.
 
 ## Where things live
 

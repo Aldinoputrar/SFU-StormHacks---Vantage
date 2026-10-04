@@ -164,7 +164,7 @@ export class BoardView {
     tile.mesh.position.copy(vec(tile.slot.center)).addScaledVector(normal, height / 2);
   }
 
-  // Spotlight is reserved for the thumbnail; playable lines glow after a click.
+  // The permanent title is spotlighted; other playable lines glow after a click.
   setHighlights(highlights) {
     this.highlights = highlights;
     for (const [key, tile] of this.tiles) {
@@ -178,6 +178,11 @@ export class BoardView {
     const normal = new THREE.Vector3();
     const letterUp = new THREE.Vector3();
     for (const tile of this.tiles.values()) {
+      if (tile.style === 'featured') {
+        // Title letters follow their shared strip axis as VAN meets TAGE.
+        this.orient(tile, vec(tile.slot.axes[0]));
+        continue;
+      }
       normal.set(...tile.slot.normal);
       const score = (right) => letterUp.crossVectors(normal, right).dot(up);
       let best = tile.right;

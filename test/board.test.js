@@ -83,7 +83,7 @@ test('a new player can write TABLE across the home-view join', () => {
 });
 
 test('six added blocks form two playable three-surface extensions', () => {
-  assert.equal(board.cells.length, 57);
+  assert.equal(board.cells.length, 64);
   for (const [view, ending, indexes, text, word] of [
     [VIEWS.northWest, 'STAR', [8], 'S', 'STARS'],
     [VIEWS.southWest, 'TION', [2, 3, 8], 'ACS', 'ACTIONS'],
