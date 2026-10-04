@@ -152,19 +152,21 @@ function isIsometric(d) {
   return d.every((v) => Math.abs(Math.abs(v) - Math.abs(d[0])) < 1e-6);
 }
 
-// True when nothing blocks the view of any of the tiles from direction dir.
-// Each tile is checked at its centre and near its four corners, so a tile
-// half hidden behind a pillar counts as hidden.
+// Sample a tile's centre and four corners. Any clear sample makes the tile
+// selectable; any blocked sample marks it as covered in the line editor.
+function visibilitySamples(board, key, dir) {
+  const { center, normal, axes } = board.slots.get(key);
+  const lifted = add(center, scale(normal, 0.01));
+  const samples = [lifted];
+  for (const u of [-0.4, 0.4]) {
+    for (const v of [-0.4, 0.4]) samples.push(add(lifted, add(scale(axes[0], u), scale(axes[1], v))));
+  }
+  return samples.map((origin) => !rayHitsVoxel(origin, dir, board.isSolid));
+}
+
+// Perspective joins need fully readable endpoints, not just a visible corner.
 function slotsVisible(board, keys, dir) {
-  return keys.every((key) => {
-    const { center, normal, axes } = board.slots.get(key);
-    const lifted = add(center, scale(normal, 0.01));
-    const samples = [lifted];
-    for (const u of [-0.4, 0.4]) {
-      for (const v of [-0.4, 0.4]) samples.push(add(lifted, add(scale(axes[0], u), scale(axes[1], v))));
-    }
-    return samples.every((origin) => !rayHitsVoxel(origin, dir, board.isSolid));
-  });
+  return keys.every((key) => visibilitySamples(board, key, dir).every(Boolean));
 }
 
 export const slotVisible = (board, key, dir) => slotsVisible(board, [key], dir);
@@ -178,7 +180,9 @@ function findJoins(board) {
       const b = ends[j];
       if (a.line === b.line || Math.min(a.line.slots.length, b.line.slots.length) < MIN_JOIN_PART) continue;
       const dir = joinDirection(a, b);
-      if (!dir || !slotsVisible(board, a.line.slots, dir) || !slotsVisible(board, b.line.slots, dir)) continue;
+      // A join is a visible meeting of two endpoints. A covered tile farther
+      // along either strip does not change that strip's physical continuity.
+      if (!dir || !slotsVisible(board, [a.slot.key, b.slot.key], dir)) continue;
       joins.push({ a: { line: a.line.id, end: a.end }, b: { line: b.line.id, end: b.end }, dir });
     }
   }
@@ -228,8 +232,9 @@ export const isJoined = (chain) => chain.cyclic || chain.lines.length > 1;
 
 // Every line on the board as seen from viewDir, with lines that line up on
 // screen merged into chains. Each chain's slots are in reading order. With
-// visibleOnly, tiles hidden from viewDir are cut out, splitting chains around
-// them, so players can only write where they can see.
+// visibleOnly, keep complete camera-facing chains with at least one visible
+// tile. Covered tiles remain playable through the line editor; hiddenSlots
+// lets the UI explain which tiles are behind other blocks.
 export function chainsForView(board, viewDir, tolerance = ALIGN_TOLERANCE, visibleOnly = false) {
   const active = board.joins
     .map((join) => ({ join, error: angleBetween(join.dir, viewDir) }))
@@ -238,33 +243,23 @@ export function chainsForView(board, viewDir, tolerance = ALIGN_TOLERANCE, visib
     .map(({ join }) => join);
   const loops = board.loops.filter((loop) => angleBetween(loop.dir, viewDir) <= tolerance);
   const view = buildChains(board, active, viewDir, loops);
-  return visibleOnly ? withoutHidden(board, view.chains, viewDir) : view;
+  return visibleOnly ? withVisibility(board, view.chains, viewDir) : view;
 }
 
-function withoutHidden(board, chains, viewDir) {
-  const visible = (key) => {
-    const slot = board.slots.get(key);
-    return dot(slot.normal, viewDir) > 0.05 && slotsVisible(board, [key], viewDir);
+function withVisibility(board, chains, viewDir) {
+  const visibility = new Map();
+  const samples = (key) => {
+    if (!visibility.has(key)) visibility.set(key, visibilitySamples(board, key, viewDir));
+    return visibility.get(key);
   };
-  const pieces = [];
+  const playable = [];
   for (const chain of chains) {
-    const shown = chain.slots.map(visible);
-    if (shown.every(Boolean)) {
-      pieces.push(chain);
-      continue;
-    }
-    let run = null;
-    chain.slots.forEach((key, i) => {
-      if (!shown[i]) {
-        run = null;
-        return;
-      }
-      if (!run) pieces.push((run = { lines: chain.lines, slots: [], slotLines: [] }));
-      run.slots.push(key);
-      run.slotLines.push(chain.slotLines[i]);
-    });
+    if (chain.slots.some((key) => dot(board.slots.get(key).normal, viewDir) <= 0.05)) continue;
+    if (!chain.slots.some((key) => samples(key).some(Boolean))) continue;
+    const hiddenSlots = chain.slots.filter((key) => !samples(key).every(Boolean));
+    playable.push({ ...chain, hiddenSlots });
   }
-  return indexChains(pieces);
+  return indexChains(playable);
 }
 
 export function nearestVantage(board, viewDir) {

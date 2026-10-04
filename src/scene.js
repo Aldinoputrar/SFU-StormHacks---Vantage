@@ -89,8 +89,13 @@ export class BoardView {
     this.tiles = new Map();
     this.pickables = [];
     this.highlights = new Map();
+    // Made for this board and released by dispose. Textures and the materials
+    // shared by colour are cached for the whole page, so they are kept.
+    this.ownedGeometries = new Set();
+    this.ownedMaterials = new Set();
 
     const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
+    this.ownedGeometries.add(blockGeometry);
     this.stoneOf = (cell) => board.colors.get(cell.join(',')) ?? COLORS.stone;
     for (const cell of board.cells) {
       const block = new THREE.Mesh(blockGeometry, material(this.stoneOf(cell), 0.95));
@@ -102,8 +107,10 @@ export class BoardView {
 
     // The letter is drawn on the box's +y face, so +y points out of the block.
     const tileGeometry = new THREE.BoxGeometry(TILE_SIZE, 1, TILE_SIZE);
+    this.ownedGeometries.add(tileGeometry);
     for (const slot of board.slots.values()) {
       const face = new THREE.MeshStandardMaterial({ roughness: 0.65 });
+      this.ownedMaterials.add(face);
       const materials = [null, null, face, null, null, null];
       const mesh = new THREE.Mesh(tileGeometry, materials);
       mesh.userData.slot = slot.key;
@@ -118,8 +125,17 @@ export class BoardView {
     scene.add(this.group);
   }
 
+  // Safe to call more than once.
   dispose() {
     this.scene.remove(this.group);
+    for (const geometry of this.ownedGeometries) geometry.dispose();
+    for (const material of this.ownedMaterials) material.dispose();
+    this.ownedGeometries.clear();
+    this.ownedMaterials.clear();
+    this.group.clear();
+    this.tiles.clear();
+    this.pickables = [];
+    this.highlights = new Map();
   }
 
   setTile(key, letter, style) {
@@ -178,6 +194,8 @@ export class BoardView {
   }
 
   // The slot under the ray, whether it hits the tile or the block around it.
+  // Always the visible surface: a covered tile is chosen in the word strip
+  // instead, so a click never goes through a block in front.
   pick(raycaster) {
     const hit = raycaster.intersectObjects(this.pickables, false)[0];
     if (!hit) return null;

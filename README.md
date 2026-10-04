@@ -44,7 +44,7 @@ You visit the chamber at the start, after every word, and after a swap. The rack
 
 1. **Earn letters** in the Hyperbolic Chamber.
 2. **Find a vantage point.** Orbit the monument; release near one of the four isometric views and the camera snaps to it. Lines that join from there glow.
-3. **Play a word.** Click a tile to lock the view and choose the line through it, then type or tap letters. A word must use at least one letter already on the board, every word it makes sideways on the same face must be valid too, and you can't write on tiles you can't see.
+3. **Play a word.** Click a tile to lock the view and choose the line through it, then type or tap letters. A word must use at least one letter already on the board, and every word it makes sideways on the same face must be valid too.
 4. **Check and score.** Words are checked with Merriam-Webster's Scrabble dictionary, then scored, and you return to the chamber for new letters.
 
 Instead of a word you can **Swap** (send your rack back and earn new letters; uses a turn). The run ends when you use your last turn, click **Finish**, or run out of tiles.
@@ -84,7 +84,7 @@ Both differences must point along **d**, which fixes the viewpoint up to sign; t
 
 - keeps only the four isometric views from above, the four rotations of a Monument Valley level; any two parallel strips line up from *some* angle, so this keeps vantage points special,
 - ignores strips that touch round a block's edge (no real gap, no illusion) and single tiles (a lone tile lines up with something from almost anywhere),
-- drops joins where another block hides any part of a tile, by stepping rays through the voxel grid from the centre and corners of each tile towards the camera ([`src/geometry.js`](src/geometry.js)),
+- drops joins where another block hides either joining end, by stepping rays through the voxel grid from the centre and corners of each tile towards the camera ([`src/geometry.js`](src/geometry.js)); tiles covered further along a line stay part of it,
 - snaps the camera to a vantage point when you let go within 10° of it.
 
 Run `npm run vantages` to list every vantage point in a level and the strips that join there.
@@ -116,6 +116,8 @@ npm run dev
 
 Open the printed local URL. You start in the Hyperbolic Chamber; collect your letters, then press **Isometric view** to see LOVE and ABLE line up as LOVEABLE.
 
+To check words with Merriam-Webster, the server must be able to reach `scrabble.merriam.com`. If it can't (offline, or a network that blocks the site), the game still works with the offline list.
+
 ```bash
 npm test          # alignment, rules, dictionary and hyperbolic maths
 npm run vantages  # list the vantage points in the level
@@ -125,8 +127,10 @@ npm run build     # production build in dist/
 ### Controls
 
 - **Chamber:** click a crystal (or press 1, 2, 3 or A, B, C).
-- **Drag** to orbit, **scroll** to zoom. Let go near a vantage point and the camera snaps to it; joined lines glow.
-- **Click a tile** to lock the view and pick the line through it. Click the same tile again to switch to the other line through it.
+- **Drag** to orbit, **scroll** to zoom. The game starts in an overhead view; **Overhead view** returns to it and **Isometric view** jumps to the home vantage point. Let go near a vantage point and the camera snaps to it; joined lines glow.
+- **Click a tile** to lock the view and pick the line through it. Click the same tile again, or the switch button, to change to the other line through it.
+- **Choose your direction.** The heading shows Across, Down or Diagonal before you type. Across is chosen first where lines cross; the switch button names the other direction.
+- **Covered squares stay in the line.** Clicks on the board always pick the surface you can see. Squares underneath another block have a dashed mark in the word strip: click them there to type on them. Letters stay on their own block.
 - **Type** letters (or tap your rack) to place them along the line, **Backspace** to undo, **Enter** to play, **Esc** to cancel.
 - **Reveal the trick** shows the real 3D gaps behind the lines joined at the current vantage point.
 - **Swap** sends your letters back for new ones (uses a turn); **Finish** ends the run.
@@ -143,6 +147,7 @@ npm run build     # production build in dist/
 | [`src/hyperbolic.js`](src/hyperbolic.js) | Poincaré disk maths and chamber rounds |
 | [`src/chamber.js`](src/chamber.js) | The Hyperbolic Chamber screen |
 | [`src/scene.js`](src/scene.js) | Drawing the monument and its tiles |
+| [`src/placement.js`](src/placement.js) | Which line a click picks first, and its direction on screen (Across, Down, Diagonal) |
 | [`src/hud.js`](src/hud.js), [`src/style.css`](src/style.css), [`index.html`](index.html) | The interface |
 | [`src/main.js`](src/main.js) | Ties it together: camera, modes, input |
 

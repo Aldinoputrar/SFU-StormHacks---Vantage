@@ -11,6 +11,7 @@
       <h1>Vantage</h1>
       <p>Drag to orbit · Scroll to zoom · Click a tile to start a word</p>
       <div id="view-buttons">
+        <button id="overhead" type="button">Overhead view</button>
         <button id="iso" type="button">Isometric view</button>
         <button id="reveal" type="button" disabled>Reveal the trick</button>
       </div>
@@ -25,6 +26,7 @@
     <section id="status" aria-live="polite">
       <strong id="headline"></strong>
       <div id="pattern" hidden></div>
+      <button id="switch-line" type="button" hidden>Switch line</button>
       <span id="hint"></span>
       <span id="message"></span>
     </section>

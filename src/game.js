@@ -8,6 +8,9 @@ import { mulberry32, shuffled } from './random.js';
 // Nothing here touches the screen, so it is all tested in Node.
 
 export const RACK_SIZE = 7;
+// The board each game is played on. Kept beside the game rather than in it,
+// so a game stays plain data that can be copied or saved.
+const boards = new WeakMap();
 export const BINGO = 50; // for using all seven tiles in one word, as in Scrabble
 const VOWELS = new Set('AEIOU');
 
@@ -29,8 +32,8 @@ export function createGame(level, board) {
     });
   }
 
-  return {
-    board,
+  const game = {
+    slots: new Set(board.slots.keys()), // the slots a tile can be placed on
     bonuses: placeBonuses(board, level.seed, (slot) => !letters.has(slot.key)), // slot key -> 'DL' | 'TL' | 'DW' | 'TW'
     letters, // slot key -> letter on the board
     pending: [], // tiles placed this turn: { slot, letter }
@@ -41,6 +44,8 @@ export function createGame(level, board) {
     finished: false,
     history: [], // every turn, with the view each word was played from
   };
+  boards.set(game, board);
+  return game;
 }
 
 // The run ends when turns run out, the player stops, or no tiles are left.
@@ -81,7 +86,8 @@ export function letterAt(game, key) {
 }
 
 export function placeTile(game, key, rackIndex) {
-  if (letterAt(game, key) || rackIndex < 0 || rackIndex >= game.rack.length) return false;
+  if (game.turnsLeft <= 0 || !game.slots.has(key) || letterAt(game, key)) return false;
+  if (!Number.isInteger(rackIndex) || rackIndex < 0 || rackIndex >= game.rack.length) return false;
   const [letter] = game.rack.splice(rackIndex, 1);
   game.pending.push({ slot: key, letter });
   return true;
@@ -120,11 +126,14 @@ export function finishRun(game) {
 
 // Checks this turn's tiles against the rules, without changing anything:
 // they must form one word along the chain (read from viewDir), use a letter
-// already on the board, and any word they make sideways on the same face
-// counts too. Returns { error } or a play whose words still need checking
-// against the dictionary before commitPlay.
+// already on the board (unless the board is still empty, like Scrabble's
+// first move), and any word they make sideways on the same face counts too.
+// Returns { error } or a play whose words still need checking against the
+// dictionary before commitPlay.
 export function preparePlay(game, chain, viewDir) {
+  if (game.turnsLeft <= 0) return { error: 'No turns left. Your run is complete.' };
   if (!game.pending.length) return { error: 'Place at least one tile first.' };
+  if (!chain?.slots?.length) return { error: 'Choose a line before playing your word.' };
   if (game.pending.some((tile) => !chain.slots.includes(tile.slot))) {
     return { error: 'All your tiles must be on the selected line.' };
   }
@@ -137,10 +146,21 @@ export function preparePlay(game, chain, viewDir) {
   if (main.error) return main;
 
   const cross = game.pending.map((tile) => crossWord(game, chain, tile.slot, viewDir)).filter(Boolean);
-  if (!main.slots.some((key) => game.letters.has(key)) && !cross.length) {
+  if (game.letters.size && !main.slots.some((key) => game.letters.has(key)) && !cross.length) {
     return { error: 'Your word must use a letter already on the board.' };
   }
   return { viewDir, main, cross, words: [main.word, ...cross.map((word) => word.word)] };
+}
+
+// Plays a word in one go with a dictionary that answers straight away, as
+// tests and tools do. The game itself checks words online, between
+// preparePlay and commitPlay.
+export function playWord(game, chain, viewDir, isWord) {
+  const play = preparePlay(game, chain, viewDir);
+  if (play.error) return play;
+  const rejected = play.words.find((word) => !isWord(word));
+  if (rejected) return { error: `${rejected} isn't in the dictionary.` };
+  return commitPlay(game, play);
 }
 
 // Commits a prepared play whose words were all accepted. Returns the score.
@@ -190,16 +210,18 @@ function scoreSlots(game, slots, fresh) {
 // The word a new tile makes across the main line, on its own face: the run of
 // letters through it along the face's other axis, if longer than one.
 function crossWord(game, chain, key, viewDir) {
-  const { board } = game;
+  const board = boards.get(game);
   const slot = board.slots.get(key);
   const i = chain.slots.indexOf(key);
   const n = chain.slots.length;
   const neighbours = [];
   if (chain.cyclic || i > 0) neighbours.push(chain.slots[(i + n - 1) % n]);
   if (chain.cyclic || i < n - 1) neighbours.push(chain.slots[(i + 1) % n]);
-  const along = slot.lines.find((id) => board.lines[id].slots.some((k) => neighbours.includes(k)));
-  const across = slot.lines.find((id) => id !== along);
-  if (along === undefined || across === undefined) return null;
+  const touches = (id) => board.lines[id].slots.some((k) => neighbours.includes(k));
+  // At a corner of a flat loop both lines run along the word, so neither is
+  // sideways.
+  const across = slot.lines.find((id) => !touches(id));
+  if (!slot.lines.some(touches) || across === undefined) return null;
 
   const line = board.lines[across].slots;
   let start = line.indexOf(key);

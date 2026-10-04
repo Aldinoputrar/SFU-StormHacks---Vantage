@@ -21,11 +21,15 @@ import {
 } from './game.js';
 import { createHud } from './hud.js';
 import { MONUMENT, VIEWS } from './level.js';
+import { placementDirection, placementOptions } from './placement.js';
 import { BoardView } from './scene.js';
 
 const SNAP_ANGLE = THREE.MathUtils.degToRad(10); // release this close to a vantage and the camera snaps
 const HINT_ANGLE = THREE.MathUtils.degToRad(20);
 const SNAP_MS = 350;
+// Looking almost straight down, tilted a little so the tower's height shows
+// while ledges stay horizontal on screen. The run starts here.
+const OVERHEAD = [0.003, 1, 0.3];
 const REVEAL_TURN = THREE.MathUtils.degToRad(40); // how far reveal swings the camera
 const REVEAL_HOLD_MS = 1200;
 
@@ -36,7 +40,10 @@ const chamber = createChamber();
 const words = createWordChecker({
   loadOffline: () =>
     fetch(wordsUrl)
-      .then((response) => response.text())
+      .then((response) => {
+        if (!response.ok) throw new Error(`Word list request failed: ${response.status}`);
+        return response.text();
+      })
       .then(createDictionary),
 });
 
@@ -83,11 +90,12 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.copy(target);
 controls.minZoom = 0.6;
 controls.maxZoom = 4;
-// Start away from every vantage point so the player has to find them.
-camera.position.copy(target).add(new THREE.Vector3(1, 0.6, 0.3).setLength(40));
+// Start overhead, away from every vantage point, so the player has to find them.
+camera.position.copy(target).add(new THREE.Vector3(...OVERHEAD).setLength(40));
 controls.update();
 
-const viewDir = () => camera.position.clone().sub(target).normalize().toArray();
+// Measured from the orbit target, which moves when the player pans.
+const viewDir = () => camera.position.clone().sub(controls.target).normalize().toArray();
 
 // 'chamber': earning letters · 'explore': orbiting · 'placing': view locked,
 // typing a word · 'checking': asking the dictionary · 'over': run finished
@@ -99,15 +107,22 @@ let snap = null;
 let revealing = false; // showing how far apart joined strips really are
 let message = null;
 let messageTimer;
-const busy = () => mode === 'chamber' || mode === 'checking';
+// The camera is moving, the chamber is open or words are being checked.
+const busy = () => Boolean(snap || revealing) || mode === 'chamber' || mode === 'checking';
+const canLook = () => !busy() && (mode === 'explore' || mode === 'over');
 
 const hud = createHud({
   onRack: placeFromRack,
   onPlay: play,
   onUndo: undo,
   onCancel: exitPlacing,
-  onIso: () => mode === 'explore' && !snap && !revealing && animateTo(VIEWS.southEast),
+  onIso: () => canLook() && animateTo(VIEWS.southEast),
+  onOverhead: () => canLook() && animateTo(OVERHEAD),
   onReveal: reveal,
+  onPattern: selectPatternSlot,
+  onSwitchLine: () => {
+    if (mode === 'placing' && selection && !game.pending.length && !busy()) selectSlot(selection.clicked, true);
+  },
   onSwap: swap,
   onFinish: finish,
 });
@@ -174,17 +189,17 @@ function renderHud() {
     const { bonuses } = game;
     headline = chain.cyclic
       ? `Endless loop of ${chain.slots.length} tiles: words can wrap around`
-      : `Line of ${chain.slots.length} tiles${surfaces > 1 ? ` across ${surfaces} surfaces` : ''}`;
-    hint =
-      mode === 'checking'
-        ? 'Checking with the Scrabble dictionary…'
-        : 'Type or tap letters · Enter to play · Backspace to undo · Esc to cancel';
+      : `${placementDirection(board, chain, lockedDir)} · ${chain.slots.length} tiles${surfaces > 1 ? ` across ${surfaces} surfaces` : ''}`;
+    if (mode === 'checking') hint = 'Checking with the Scrabble dictionary…';
+    else if (chain.hiddenSlots?.length) hint = 'Dashed squares are on this line, underneath another block: click them in the word strip.';
+    else hint = 'Type or tap letters · Enter to play · Backspace to undo · Esc to cancel';
     pattern = chain.slots.map((key, i) => ({
       letter: letterAt(game, key),
       pending: game.pending.some((tile) => tile.slot === key),
       cursor: i === selection.cursor,
       joint: i > 0 && chain.slotLines[i] !== chain.slotLines[i - 1],
       bonus: !letterAt(game, key) ? (bonuses.get(key) ?? null) : null,
+      covered: chain.hiddenSlots?.includes(key) ?? false,
     }));
     const reachable = chain.slots.filter((key) => !game.letters.has(key) && bonuses.has(key));
     if (reachable.length) headline += ` · ${reachable.map((key) => bonuses.get(key)).join(', ')} in reach`;
@@ -205,13 +220,24 @@ function renderHud() {
     }
   }
 
-  const canReveal = !revealing && !snap && current.chains.some(isJoined);
+  const placing = mode === 'placing';
+  const canSwitch = placing && Boolean(selection) && lineOptions(selection.clicked).length > 1;
+  let switchLabel = 'Switch line';
+  if (canSwitch) {
+    const options = lineOptions(selection.clicked);
+    const next = options[(options.indexOf(selection.chain) + 1) % options.length];
+    switchLabel = `Switch to ${placementDirection(board, next, lockedDir)} (${next.slots.length} tiles)`;
+  }
   hud.render({
     game,
-    placing: mode === 'placing',
+    placing,
     busy: busy(),
     over: mode === 'over',
-    canReveal,
+    canPlace: placing && Boolean(selection) && !busy(),
+    canIso: canLook(),
+    canReveal: canLook() && current.chains.some(isJoined),
+    canSwitch,
+    switchLabel,
     headline,
     hint,
     pattern,
@@ -221,8 +247,9 @@ function renderHud() {
 
 // Swings the camera around the target to look from dir.
 function animateTo(dir, then) {
-  const offset = camera.position.clone().sub(target);
+  const offset = camera.position.clone().sub(controls.target);
   snap = {
+    target: controls.target.clone(),
     from: offset.clone().normalize(),
     to: new THREE.Vector3(...dir).normalize(),
     distance: offset.length(),
@@ -230,6 +257,7 @@ function animateTo(dir, then) {
     then,
   };
   controls.enabled = false;
+  renderHud();
 }
 
 function stepSnap(now) {
@@ -237,7 +265,7 @@ function stepSnap(now) {
   const eased = 1 - (1 - t) ** 3;
   const turn = new THREE.Quaternion().setFromUnitVectors(snap.from, snap.to);
   const dir = snap.from.clone().applyQuaternion(new THREE.Quaternion().slerp(turn, eased));
-  camera.position.copy(target).addScaledVector(dir, snap.distance);
+  camera.position.copy(snap.target).addScaledVector(dir, snap.distance);
   controls.update();
   if (t === 1) {
     const { then } = snap;
@@ -283,7 +311,7 @@ async function earnLetters(title) {
 // across every hidden gap, so the player sees the strips come apart.
 function reveal() {
   const joined = current.chains.filter(isJoined);
-  if (snap || revealing || busy() || !joined.length) return;
+  if (!canLook() || !joined.length) return;
   revealing = true;
   for (const chain of joined) drawGhosts(chain);
   const home = viewDir();
@@ -293,6 +321,7 @@ function reveal() {
       () =>
         animateTo(home, () => {
           revealing = false;
+          for (const ghost of ghosts.children) ghost.geometry.dispose();
           ghosts.clear();
           controls.enabled = mode === 'explore' || mode === 'over';
           refresh();
@@ -319,21 +348,21 @@ function drawGhosts(chain) {
   }
 }
 
+// Freezes the view as it is. Snapping here could move another block over the
+// clicked tile, so the camera only snaps when a drag ends.
 function lockView(key) {
-  if (mode !== 'explore' || snap || revealing) return;
-  snapIfNear(() => {
-    mode = 'placing';
-    controls.enabled = false;
-    lockedDir = viewDir();
-    current = chainsForView(board, lockedDir, undefined, true);
-    selection = null;
-    if (key) selectSlot(key);
-    else refresh();
-  });
+  if (mode !== 'explore' || busy()) return;
+  mode = 'placing';
+  controls.enabled = false;
+  lockedDir = viewDir();
+  current = chainsForView(board, lockedDir, undefined, true);
+  selection = null;
+  if (key) selectSlot(key);
+  else refresh();
 }
 
 function exitPlacing() {
-  if (mode !== 'placing') return;
+  if (mode !== 'placing' || busy()) return;
   for (const key of cancelPending(game)) view.setTile(key, '', 'empty');
   selection = null;
   lockedDir = null;
@@ -342,12 +371,15 @@ function exitPlacing() {
   refresh();
 }
 
-// Picks a line through the slot: a joined one if there is one, then the
-// longest. Choosing the same slot again switches to its other line.
+// The lines through a slot, across first (see placement.js).
+function lineOptions(key) {
+  return placementOptions(board, current, key, lockedDir ?? viewDir());
+}
+
+// Picks a line through the slot. Choosing the same slot again, or the switch
+// button, moves on to its next line.
 function selectSlot(key, toggle = false) {
-  const options = (current.bySlot.get(key) ?? [])
-    .filter((chain) => chain.slots.length >= 2)
-    .sort((a, b) => isJoined(b) - isJoined(a) || b.slots.length - a.slots.length);
+  const options = lineOptions(key);
   if (!options.length) {
     setMessage('No line runs through that tile from here.', 'error');
     return;
@@ -355,6 +387,15 @@ function selectSlot(key, toggle = false) {
   const chain = toggle && selection ? options[(options.indexOf(selection.chain) + 1) % options.length] : options[0];
   selection = { chain, cursor: 0, clicked: key };
   selection.cursor = cursorFrom(chain.slots.indexOf(key));
+  refresh();
+}
+
+// Clicking a square in the word strip, which also reaches squares covered by
+// another block, moves the cursor there.
+function selectPatternSlot(index) {
+  if (mode !== 'placing' || !selection || busy()) return;
+  if (!Number.isInteger(index) || index < 0 || index >= selection.chain.slots.length) return;
+  selection.cursor = cursorFrom(index);
   refresh();
 }
 
@@ -391,7 +432,7 @@ function placeFromRack(index) {
   }
   const key = selection.chain.slots[at];
   const letter = game.rack[index];
-  placeTile(game, key, index);
+  if (!placeTile(game, key, index)) return;
   view.setTile(key, letter, 'pending');
   const next = nextEmpty(at + 1);
   selection.cursor = next === -1 ? selection.chain.slots.length : next;
@@ -405,7 +446,7 @@ function typeLetter(letter) {
 }
 
 function undo() {
-  if (mode !== 'placing') return;
+  if (mode !== 'placing' || busy()) return;
   const key = undoTile(game);
   if (!key) return;
   view.setTile(key, '', 'empty');
@@ -416,7 +457,7 @@ function undo() {
 // Checks the word (and any words made sideways) with the dictionary, then
 // scores it and sends the player to earn more letters.
 async function play() {
-  if (mode !== 'placing' || !selection) return;
+  if (mode !== 'placing' || !selection || busy()) return;
   const prepared = preparePlay(game, selection.chain, lockedDir);
   if (prepared.error) {
     setMessage(prepared.error, 'error');
@@ -460,7 +501,7 @@ function describePoints({ letters, wordMultiplier, surfaces, cross, bingo, bonus
 }
 
 async function swap() {
-  if (mode !== 'explore' || !swapRack(game)) return;
+  if (mode !== 'explore' || busy() || !swapRack(game)) return;
   if (isOver(game)) {
     mode = 'over';
     refresh();
@@ -482,7 +523,7 @@ const raycaster = new THREE.Raycaster();
 const pointerDown = new THREE.Vector2();
 renderer.domElement.addEventListener('pointerdown', (event) => pointerDown.set(event.clientX, event.clientY));
 renderer.domElement.addEventListener('pointerup', (event) => {
-  if (snap || revealing || busy() || pointerDown.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 6) {
+  if (busy() || pointerDown.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 6) {
     return;
   }
   const ndc = new THREE.Vector2(
@@ -513,6 +554,13 @@ renderer.domElement.addEventListener('pointerup', (event) => {
 
 window.addEventListener('keydown', (event) => {
   if (event.ctrlKey || event.metaKey || event.altKey || busy()) return;
+  if (event.target.matches?.('input, textarea, select, [contenteditable="true"]')) return;
+  // Enter still plays after clicking the word strip or rack; other buttons
+  // keep their own Enter, and Space always presses the focused button.
+  if (event.target.closest?.('button')) {
+    if (event.key === ' ') return;
+    if (event.key === 'Enter' && (!game.pending.length || !event.target.closest('#pattern, #rack'))) return;
+  }
   if (/^[a-z]$/i.test(event.key)) typeLetter(event.key.toUpperCase());
   else if (event.key === 'Enter') play();
   else if (event.key === 'Backspace') undo();
