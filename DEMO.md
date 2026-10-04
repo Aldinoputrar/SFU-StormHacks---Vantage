@@ -6,7 +6,7 @@ Useful addresses for a demo:
 
 - `?game=golf` (or `dash`, `swarm`, `bounce`) and `?quiz=square` (or `closest`, `straight`, `triangle`) choose the chamber's rounds, so you can show the one you want.
 - `?skip` offers "Skip the chamber" from the very first visit, to get to the board quickly.
-- `?map=spire` or `?map=courtyard` opens another map. They combine: `?map=spire&game=golf&skip`.
+- `?map=plaza`, `?map=spire` or `?map=courtyard` opens another map. They combine: `?map=plaza&game=golf&skip`. The swing bridge is on the Plaza.
 
 ## 0:00 – The hook (title screen)
 
@@ -37,6 +37,8 @@ After a closest-crystal quiz the crystals slide to the middle and become a trian
 > "Its angles add up to less than 180°, and by Gauss–Bonnet the missing angle is exactly its area. We compute that live. Crystal sizes are normalised so the biggest-looking one isn't a giveaway; before that fix it was the answer 100% of the time."
 
 ## 1:00 – The monument (*Impossible spaces, UX*)
+
+Use the Plaza map for this part (`?map=plaza`): its ABLE hook is open and it has the swing bridge. On the Monument map the same view shows LOVE and ABLE already joined as LOVEABLE, which is the quickest way to show the illusion itself.
 
 Collect the letters. Point out the **compass** (bottom right): the orange dot is the camera, the four dots are vantage points.
 
@@ -82,7 +84,7 @@ Walk a loop with W A S D and come back to the star:
 
 ## 2:45 – Close (*Technical execution, Documentation*)
 
-> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. Ninety-nine Node tests cover alignment, rules, the dictionary, the maths in all three geometries, and even play the four action games. There are three maps, pass-and-play for four, and a leaderboard. The README explains every formula."
+> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. A hundred Node tests cover alignment, rules, the dictionary, the maths in all three geometries, and even play the four action games. There are four maps, pass-and-play for four, and a leaderboard. The README explains every formula."
 
 ## Questions you might get
 

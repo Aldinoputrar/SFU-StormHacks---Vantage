@@ -171,8 +171,8 @@ export function radiusDrawnAs(r, e) {
 // the round could be won without reading the tiling.
 export function generateRound(random = Math.random, player = null) {
   for (let attempt = 0; attempt < 1000; attempt++) {
-    const at = player ?? polar(0.36 + 0.2 * random(), 2 * Math.PI * random());
-    const reach = 0.4 + 0.1 * random();
+    const at = player ?? polar(0.05 + 0.28 * random(), 2 * Math.PI * random());
+    const reach = 0.38 + 0.12 * random();
     const turn = 2 * Math.PI * random();
     const crystals = [0, 1, 2].map((i) =>
       add(at, polar(reach * (0.92 + 0.16 * random()), turn + (i * 2 * Math.PI) / 3 + (random() - 0.5) * 0.7)),

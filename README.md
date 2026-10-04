@@ -14,17 +14,18 @@ A single-player word puzzle in two parts. In the **Hyperbolic Chamber** you earn
 
 ## The core idea
 
-The board itself hides opportunities. Two strips of tiles might be far apart in 3D space, but from one viewing angle they line up as a continuous word. ABLE sits on a floating arm, blocks away from the plaza; type LOVE on the plaza and, from the right angle, it runs on into ABLE as LOVEABLE (or T into TABLE, UN into UNABLE).
+The board itself hides opportunities. Two strips of tiles might be far apart in 3D space, but from one viewing angle they line up as a continuous word. ABLE sits on a floating arm, blocks away from the central structure; with LOVE on the base arm, from the right angle it runs on into ABLE as LOVEABLE (or T into TABLE, UN into UNABLE).
 
 An orthographic camera lets surfaces at different depths appear to touch without perspective foreshortening. What counts as adjacent depends on your viewpoint, so finding the right place to look is part of solving the puzzle.
 
 Every face of every block can hold letters: tops, sides and undersides. Each face is a small Scrabble board, and a word can run along one strip and carry on along another. Words read left to right (or top to bottom) as they appear from where you stand.
 
-## Three maps
+## Four maps
 
 Choose a map on the title screen. Each has the same rules and its own tricks:
 
-- **The Monument:** a plaza, a tower, four floating arms, the endless crown and the swing bridge. Hooks …ABLE, …RISE, …STAR, …TION.
+- **The Monument:** a tower, four arms reaching out from its base and the endless crown. LOVE lies on one arm and, from the home view, runs straight into ABLE as LOVEABLE. Hooks …RISE, …STAR, …TION.
+- **The Plaza:** the same tower and crown on a 5 × 5 sand plaza, with four floating arms and the swing bridge. Every hook is left open for the player to start: …ABLE (TABLE, UNABLE), …RISE, …STAR, …TION.
 - **The Spire:** a thin tower with ledges at four heights and the crown on top. Hooks …IGHT, …OUND, …LESS, …NESS.
 - **The Courtyard:** a wide 7 × 7 plaza, the most room for ordinary Scrabble, with eight floating arms, two from each corner. From one corner an arm reads outward and ends a word (…ATE, …ING, …LESS, …OUND); from the other it reads inward and starts one (OVER…, FORE…, BACK…, DOWN…).
 
@@ -32,12 +33,12 @@ The tests check that every map joins lines from all four corners and that every 
 
 ## The monument
 
-One connected monument: a sand plaza (a 5×5 Scrabble board on top), a lavender tower in the middle, a coral Penrose crown resting on the tower, and four mint arms in a pinwheel.
+One connected monument: a lavender tower in the middle, a coral Penrose crown resting on the tower, and four mint arms in a pinwheel.
 
-- **Four views, like Monument Valley's rotations.** Vantage points are the four isometric views from above. Each arm's far end is shifted one step along one of those view directions, so each arm only joins the plaza, and its words only connect, from one corner. From anywhere else it is a broken bridge.
-- **Hook words.** Lines read from the plaza out along each arm, and only the far ends hold letters: …ABLE (LOVEABLE, TABLE), …RISE (SUNRISE), …STAR (LODESTAR), …TION (MOTION). The start of each line is left empty, because a word already complete across the gap could never be extended.
+- **Four views, like Monument Valley's rotations.** Vantage points are the four isometric views from above. Each arm's far end is shifted one step along one of those view directions, so each arm only joins the structure, and its words only connect, from one corner. From anywhere else it is a broken bridge.
+- **Hook words.** Lines read out along each arm, with starting and ending words: LOVEABLE, SUNRISE, LODESTAR, MOTION.
 - **The Penrose crown.** Four strips around a square, each lifted a different amount along the home view (1, 1, 1). From that view the lifts vanish and the strips close into one ring of 12 tiles with no start and no end, so a word can run round a corner and past any point. Orbit away and it opens into a staircase that climbs at three corners yet returns to where it started. One side rests on the tower, so the crown is part of the monument.
-- **The swing bridge.** A blue bridge floats beside the tower. **Swing the bridge** turns it a quarter turn about its first block, for free, carrying any letters on it. In one position, seen from the home view, it runs straight into the crown and its O (TRI-O, ECH-O); in the other, seen from the opposite corner, it runs into TION from a new side (MO-TION). The board is rebuilt after each swing, so its joins and vantage points follow. The spot was found by searching every floating position for one whose two positions each join a different line.
+- **The swing bridge** (on the Plaza). A blue bridge floats beside the tower. **Swing the bridge** turns it a quarter turn about its first block, for free, carrying any letters on it. In one position, seen from the home view, it runs straight into the crown and its O (TRI-O, ECH-O); in the other, seen from the opposite corner, it runs into TION from a new side (MO-TION). The board is rebuilt after each swing, so its joins and vantage points follow. The spot was found by searching every floating position for one whose two positions each join a different line.
 - **Reveal the trick** swings the camera away from a vantage point and back, with dashed bars across every hidden gap.
 - **The compass** (bottom right) maps every view direction from above: the centre is straight down, the ring is the horizon, the four dots are the vantage points and the orange dot is you. Click a dot to fly there.
 
@@ -196,11 +197,11 @@ npm install
 npm run dev
 ```
 
-Open the printed local URL and press **Play**. You start in the Hyperbolic Chamber; collect your letters, then press **Isometric view** to see the empty plaza row run straight into ABLE on its floating arm. Click the glowing tile just before A and type a T: TABLE scores twice, once for each surface. Or open **Explore the Hyperbolic Lab** and press **Walk a square for me**.
+Open the printed local URL and press **Play**. You start in the Hyperbolic Chamber; collect your letters, then press **Isometric view** to see LOVE on the base arm run straight into ABLE on its floating arm as LOVEABLE. Or open **Explore the Hyperbolic Lab** and press **Walk a square for me**.
 
 To check words with Merriam-Webster, the server must be able to reach `scrabble.merriam.com`. If it can't (offline, or a network that blocks the site), the game still works with the offline list.
 
-For demos, the address can choose what to show: `?map=spire` or `?map=courtyard` for another map, `?game=golf` (or `dash`, `swarm`, `bounce`) and `?quiz=square` (or `closest`, `straight`, `triangle`) for the chamber's rounds, and `?skip` to offer skipping the chamber from the first visit.
+For demos, the address can choose what to show: `?map=plaza`, `?map=spire` or `?map=courtyard` for another map, `?game=golf` (or `dash`, `swarm`, `bounce`) and `?quiz=square` (or `closest`, `straight`, `triangle`) for the chamber's rounds, and `?skip` to offer skipping the chamber from the first visit.
 
 ```bash
 npm test          # alignment, rules, dictionary, hyperbolic maths and the action games
@@ -264,7 +265,7 @@ npm run build     # production build in dist/
 - [x] A swing bridge that changes which lines join
 - [x] Missions, and celebrations for every word
 - [x] Compass of vantage points
-- [x] Three maps
+- [x] Four maps
 - [x] Four action games and four quizzes in the chamber
 - [x] A traveller who walks every word
 - [x] Pass-and-play for up to four

@@ -400,11 +400,12 @@ export function createChamber({ sound } = {}) {
       };
       player = disk.toWorld(layout.player);
     } else {
-      // Seen from the centre, nearer always looks nearer, so the player
-      // first steps out from it.
+      // Seen from near the centre, nearer always looks nearer and no fair
+      // round exists (inside a radius of about 0.2 none can be laid out),
+      // so the player first steps out to where one always can.
       let at = spot;
       if (!at || abs(at) < 0.3) {
-        const to = polar(0.36 + 0.2 * Math.random(), 2 * Math.PI * Math.random());
+        const to = polar(0.3 + 0.15 * Math.random(), 2 * Math.PI * Math.random());
         if (at) await slide(at, to);
         at = to;
       }

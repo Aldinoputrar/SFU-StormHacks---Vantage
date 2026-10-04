@@ -34,8 +34,8 @@ export const VIEWS = {
   southWest: [-1, 1, 1],
 };
 
-// An arm leaves the plaza's edge along dir: two blocks attached to the plaza,
-// then four more shifted one step along a view direction. A shift along the
+// An arm leaves the monument along dir: `near` blocks attached to it, then
+// four more shifted one step along a view direction. A shift along the
 // view is invisible from that view, so the arm only looks whole, and its
 // lines only join up, from that one corner. From anywhere else it is a broken
 // bridge.
@@ -86,14 +86,50 @@ const CROWN = penroseCrown([0, 7, 0], 4);
 // whose positions each join a different line (see the tests).
 const BRIDGE = { pivot: [-6, 5, -2], length: 4, dirs: [[1, 0, 0], [0, 0, 1]], color: SKY };
 
-// The monument: a sand plaza with a lavender tower in the middle, the Penrose
-// crown on top, and four mint arms in a pinwheel. Each arm leaves the plaza on
-// the side facing its own view, so the tower never stands between that view
-// and the arm's line. Run `npm run vantages` to list where lines join.
+// The Monument: a lavender tower, the Penrose crown on top, and four mint
+// arms in a pinwheel reaching out from the tower's base, four blocks each
+// and then four more floating. LOVE lies on one arm, so from the home view
+// it runs straight on into ABLE as LOVEABLE; the other three arms are empty
+// up to their hooks: (SUN)RISE, (LODE)STAR, (MO)TION.
 export const MONUMENT = {
   id: 'monument',
   name: 'The Monument',
-  blurb: 'The original: a plaza, a tower, four floating arms, the endless crown and a swing bridge. Hooks: …ABLE, …RISE, …STAR, …TION.',
+  blurb: 'A tower, four arms reaching out from its base and the endless crown. LOVE runs into ABLE as LOVEABLE; hooks …RISE, …STAR, …TION.',
+  seed: 20261004,
+  turns: 12,
+  blocks: [
+    { start: [0, 0, 0], dir: [0, 1, 0], length: 7, color: LAVENDER },
+    ...CROWN.blocks,
+    ...arm([1, 0, 1], [1, 0, 0], VIEWS.southEast, 4),
+    ...arm([1, 0, -1], [0, 0, -1], VIEWS.northEast, 4),
+    ...arm([-1, 0, -1], [-1, 0, 0], VIEWS.northWest, 4),
+    ...arm([-1, 0, 1], [0, 0, 1], VIEWS.southWest, 4),
+  ],
+  // Where the traveller waits at the start, in sight of every corner.
+  start: { cell: [-1, 0, 1], face: '+y' },
+  // Closed rings of tiles, each seen as one from a single viewpoint.
+  loops: [CROWN.loop],
+  // Letters already on the board: each text runs from start along dir, on
+  // the given face of each block, and spaces are left empty.
+  words: [
+    { start: [1, 0, 1], dir: [1, 0, 0], face: '+y', text: 'LOVE' },
+    { start: [6, 1, 2], dir: [1, 0, 0], face: '+y', text: 'ABLE' },
+    { start: [2, 1, -6], dir: [0, 0, -1], face: '+y', text: 'RISE' },
+    { start: [-6, 1, -2], dir: [-1, 0, 0], face: '+y', text: 'STAR' },
+    { start: [-2, 1, 6], dir: [0, 0, 1], face: '+y', text: 'TION' },
+    { start: [2, 7, 0], dir: [1, 0, 0], face: '+y', text: 'O' },
+  ],
+};
+
+// The Plaza: the same tower and crown standing on a sand plaza, a 5 by 5
+// Scrabble board, with four mint arms in a pinwheel and a swing bridge. Each
+// arm leaves the plaza on the side facing its own view, so the tower never
+// stands between that view and the arm's line. Run `npm run vantages` to list
+// where lines join.
+export const PLAZA = {
+  id: 'plaza',
+  name: 'The Plaza',
+  blurb: 'A 5 × 5 plaza round the tower, four floating arms, the endless crown and a swing bridge. Hooks: …ABLE, …RISE, …STAR, …TION.',
   seed: 20261004,
   turns: 12,
   blocks: [
@@ -193,4 +229,4 @@ export const COURTYARD = {
 };
 
 // Every map, in the order the title screen offers them.
-export const MAPS = [MONUMENT, SPIRE, COURTYARD];
+export const MAPS = [MONUMENT, PLAZA, SPIRE, COURTYARD];

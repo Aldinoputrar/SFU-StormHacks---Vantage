@@ -342,3 +342,11 @@ test('a wall through two points is a geodesic, and bouncing mirrors the heading 
   const line = geodesicCircle([0.2, 0.2], [-0.4, -0.4]);
   assert.ok(line.line);
 });
+
+test('a closest-crystal round can always be laid out for a player 0.3 or more from the centre', () => {
+  const random = mulberry32(77);
+  for (let i = 0; i < 300; i++) {
+    const at = polar(0.3 + 0.26 * random(), 2 * Math.PI * random());
+    assert.doesNotThrow(() => generateRound(random, at));
+  }
+});

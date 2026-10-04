@@ -295,10 +295,15 @@ function renderHud() {
       hint = 'Click a glowing tile to play along it · Words must use a letter already on the board';
       // The first turn, from the home view: point at the illusion itself.
       // The first turn: point at the illusion itself.
-      const hooked = joined.find((chain) => !chain.cyclic && chain.slots.some((key) => letterAt(game, key)));
-      if (!game.history.length && hooked) {
-        const letters = hooked.slots.map((key) => letterAt(game, key)).join('');
-        hint = `${letters} floats blocks away, yet from here a row of empty tiles runs straight into it. Click a glowing tile next to it and type letters to make a word.`;
+      const lettered = joined.filter((chain) => !chain.cyclic && chain.slots.some((key) => letterAt(game, key)));
+      const open = lettered.find((chain) => chain.slots.some((key) => !letterAt(game, key)));
+      const lettersOn = (chain) => chain.slots.map((key) => letterAt(game, key)).join('');
+      if (!game.history.length && open) {
+        hint = `${lettersOn(open)} floats blocks away, yet from here a row of empty tiles runs straight into it. Click a glowing tile next to it and type letters to make a word.`;
+      } else if (!game.history.length && lettered.length) {
+        // A line already full, like LOVE and ABLE: show the trick, then
+        // point at somewhere with room.
+        hint = `${lettersOn(lettered[0])} is two pieces, blocks apart in 3D, that read as one word from here. It has no room left: play on the glowing loop, or click another dot on the compass.`;
       }
     } else {
       headline = near && near.angle < HINT_ANGLE ? 'Something lines up nearby…' : 'Find where the strips line up';
@@ -1176,7 +1181,10 @@ muteButton.addEventListener('click', () => {
 });
 showMute();
 // Any interaction may start the audio; browsers refuse it before one.
-window.addEventListener('pointerdown', () => sound.unlock(), { once: true });
+const unlockAudio = () => sound.unlock();
+['pointerdown', 'click', 'keydown', 'touchstart'].forEach((evt) =>
+  window.addEventListener(evt, unlockAudio, { passive: true }),
+);
 
 refresh();
 let frame = 0;
