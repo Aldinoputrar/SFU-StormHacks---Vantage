@@ -4,6 +4,9 @@ import { LETTER_VALUES } from './level.js';
 
 const TILE_SIZE = 0.84;
 const HEIGHT = { empty: 0.02, fixed: 0.09, pending: 0.09, featured: 0.12 };
+const POP_S = 0.35; // how long a tile takes to pop when it lands or scores
+const POP_STAGGER_S = 0.06; // a word's tiles pop one after another
+const FLASH = new THREE.Color('#ffd54a');
 const COLORS = {
   stone: '#b9a7c9', // blocks whose run gives no colour
   fixed: '#fff3dc',
@@ -24,12 +27,24 @@ const BONUS_COLORS = { DL: '#5ba4d6', TL: '#1f6f9f', DW: '#ec9c9c', TW: '#d1495b
 const GLOW = {
   spotlight: { color: new THREE.Color('#ffcf80'), base: 0.16, pulse: 0, speed: 0 },
   selected: { color: new THREE.Color('#ffae00'), base: 0.32, pulse: 0, speed: 0 },
+  hover: { color: new THREE.Color('#ffae00'), base: 0.2, pulse: 0, speed: 0 },
+  hoverAligned: { color: new THREE.Color('#5fe0d0'), base: 0.75, pulse: 0.15, speed: 3 },
   cursor: { color: new THREE.Color('#ff8a00'), base: 0.55, pulse: 0.3, speed: 6 },
 };
 
+// The interface's display font, with fallbacks until it has loaded.
+const FONT = '"Josefin Sans Variable", "Avenir Next", system-ui, sans-serif';
+
 const textures = new Map();
-function faceTexture(style, letter, bonus, stone) {
-  const key = `${style}:${letter}:${bonus ?? ''}:${style === 'empty' ? stone : ''}`;
+
+// Drops every drawn face, so they are drawn afresh: used once the display
+// font has loaded, since faces drawn before then used a fallback.
+export function forgetTextures() {
+  for (const texture of textures.values()) texture.dispose();
+  textures.clear();
+}
+function faceTexture(style, letter, bonus, stone, wild = false) {
+  const key = `${style}:${letter}:${bonus ?? ''}:${style === 'empty' ? stone : ''}:${wild ? 'wild' : ''}`;
   if (textures.has(key)) return textures.get(key);
 
   const size = 256;
@@ -43,8 +58,8 @@ function faceTexture(style, letter, bonus, stone) {
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 112px system-ui, sans-serif';
-    ctx.fillText(bonus, size / 2, size / 2 + 6);
+    ctx.font = `700 108px ${FONT}`;
+    ctx.fillText(bonus, size / 2, size / 2 + 12);
   } else if (style === 'empty') {
     ctx.fillStyle = tint(stone, '#ffffff', 0.3);
     ctx.fillRect(0, 0, size, size);
@@ -66,10 +81,11 @@ function faceTexture(style, letter, bonus, stone) {
     ctx.fillStyle = COLORS[`${style}Ink`];
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 150px system-ui, sans-serif';
-    ctx.fillText(letter, size / 2, size / 2 + 8);
-    ctx.font = 'bold 46px system-ui, sans-serif';
-    ctx.fillText(String(LETTER_VALUES[letter] ?? ''), size - 42, size - 38);
+    ctx.font = `700 156px ${FONT}`;
+    ctx.fillText(letter, size / 2, size / 2 + 18);
+    ctx.font = `700 46px ${FONT}`;
+    // A wild tile scores nothing, so it shows a star where its value would be.
+    ctx.fillText(wild ? '★' : String(LETTER_VALUES[letter] ?? ''), size - 42, size - 34);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -99,6 +115,8 @@ export class BoardView {
     this.tiles = new Map();
     this.pickables = [];
     this.highlights = new Map();
+    this.pops = new Map(); // slot key -> { start (s), flash }: tiles bouncing as they land or score
+    this.swinging = null; // the bridge's meshes while it swings
     // Made for this board and released by dispose. Textures and the materials
     // shared by colour are cached for the whole page, so they are kept.
     this.ownedGeometries = new Set();
@@ -124,7 +142,7 @@ export class BoardView {
       const materials = [null, null, face, null, null, null];
       const mesh = new THREE.Mesh(tileGeometry, materials);
       mesh.userData.slot = slot.key;
-      const tile = { slot, mesh, face, materials, style: null, letter: null, right: null };
+      const tile = { slot, mesh, face, materials, style: null, letter: null, wild: false, right: null };
       this.tiles.set(slot.key, tile);
       this.setTile(slot.key, '', 'empty');
       this.orient(tile, vec(slot.axes[0]));
@@ -148,20 +166,58 @@ export class BoardView {
     this.highlights = new Map();
   }
 
-  setTile(key, letter, style) {
+  setTile(key, letter, style, wild = false) {
     const tile = this.tiles.get(key);
-    if (tile.style === style && tile.letter === letter) return;
+    if (tile.style === style && tile.letter === letter && tile.wild === wild) return;
     tile.style = style;
     tile.letter = letter;
+    tile.wild = wild;
     const stone = this.stoneOf(tile.slot.cell);
-    tile.face.map = faceTexture(style, letter, style === 'empty' ? this.bonuses.get(key) : null, stone);
+    tile.face.map = faceTexture(style, letter, style === 'empty' ? this.bonuses.get(key) : null, stone, wild);
     tile.face.needsUpdate = true;
     for (const i of [0, 1, 3, 4, 5]) tile.materials[i] = sideMaterial(style, stone);
 
-    const height = HEIGHT[style];
-    const normal = vec(tile.slot.normal);
-    tile.mesh.scale.set(1, height, 1);
-    tile.mesh.position.copy(vec(tile.slot.center)).addScaledVector(normal, height / 2);
+    this.place(tile, 1, 1);
+    if (style === 'pending') this.pops.set(key, { start: performance.now() / 1000, flash: false });
+  }
+
+  // Sizes a tile: spread across its face and lift above it.
+  place(tile, spread, lift) {
+    const height = HEIGHT[tile.style] * lift;
+    tile.mesh.scale.set(spread, height, spread);
+    tile.mesh.position.copy(vec(tile.slot.center)).addScaledVector(vec(tile.slot.normal), height / 2);
+  }
+
+  // A scored word: its tiles bounce one after another, flashing gold when
+  // the word crossed the illusion.
+  celebrate(keys, flash = false) {
+    const now = performance.now() / 1000;
+    keys.forEach((key, i) => this.tiles.has(key) && this.pops.set(key, { start: now + i * POP_STAGGER_S, flash }));
+  }
+
+  // Turns the cells of the swing bridge about the vertical axis through its
+  // pivot, by angle radians, ready for the board to be rebuilt in the new
+  // position. Their original places are remembered on the first call.
+  swing(cells, pivot, angle) {
+    this.swinging ??= this.group.children
+      .filter((mesh) => cells.has((mesh.userData.cell ?? this.tiles.get(mesh.userData.slot)?.slot.cell)?.join(',')))
+      .map((mesh) => ({ mesh, position: mesh.position.clone(), quaternion: mesh.quaternion.clone() }));
+    const centre = vec(pivot);
+    const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+    for (const { mesh, position, quaternion } of this.swinging) {
+      mesh.position.copy(position).sub(centre).applyQuaternion(turn).add(centre);
+      mesh.quaternion.copy(turn).multiply(quaternion);
+    }
+  }
+
+  // Draws every tile's face again (see forgetTextures).
+  redraw() {
+    for (const [key, tile] of this.tiles) {
+      const { letter, style, wild } = tile;
+      tile.style = null;
+      this.setTile(key, letter, style, wild);
+      if (style === 'pending') this.pops.delete(key);
+    }
   }
 
   // The permanent title is spotlighted; other playable lines glow after a click.
@@ -225,6 +281,23 @@ export class BoardView {
       const face = this.tiles.get(key).face;
       face.emissive.copy(glow.color);
       face.emissiveIntensity = glow.base + glow.pulse * Math.sin(time * glow.speed);
+    }
+    for (const [key, { start, flash }] of this.pops) {
+      const tile = this.tiles.get(key);
+      const t = (time - start) / POP_S;
+      if (!tile || t < 0) continue;
+      if (t >= 1) {
+        this.place(tile, 1, 1);
+        if (!this.highlights.has(key)) tile.face.emissiveIntensity = 0;
+        this.pops.delete(key);
+        continue;
+      }
+      const bump = Math.sin(Math.PI * t);
+      this.place(tile, 1 + 0.28 * bump, 1 + 3 * bump);
+      if (flash) {
+        tile.face.emissive.copy(FLASH);
+        tile.face.emissiveIntensity = Math.max(tile.face.emissiveIntensity, 0.9 * (1 - t));
+      }
     }
   }
 }

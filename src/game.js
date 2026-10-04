@@ -1,5 +1,5 @@
 import { add, scale } from './geometry.js';
-import { readingOrder, slotKey } from './board.js';
+import { buildBoard, faceOf, readingOrder, slotKey, swingCell, swingNormal, swingTurns } from './board.js';
 import { BONUS_KINDS, placeBonuses } from './bonuses.js';
 import { LETTER_VALUES, TILE_COUNTS } from './level.js';
 import { mulberry32, shuffled } from './random.js';
@@ -12,6 +12,7 @@ export const RACK_SIZE = 7;
 // so a game stays plain data that can be copied or saved.
 const boards = new WeakMap();
 export const BINGO = 50; // for using all seven tiles in one word, as in Scrabble
+export const WILD = '?'; // a wild tile in the rack: it can stand for any letter, and scores nothing
 const VOWELS = new Set('AEIOU');
 
 function createBag(seed) {
@@ -32,9 +33,13 @@ export function createGame(level, board) {
     });
   }
 
+  // Bonus squares stay put, so none go on the swing bridge.
+  const free = (slot) => !letters.has(slot.key) && !board.bridgeCells?.has(slot.cell.join(','));
   const game = {
+    level,
+    bridge: level.bridgePosition ?? 0, // which way the swing bridge points
     slots: new Set(board.slots.keys()), // the slots a tile can be placed on
-    bonuses: placeBonuses(board, level.seed, (slot) => !letters.has(slot.key)), // slot key -> 'DL' | 'TL' | 'DW' | 'TW'
+    bonuses: placeBonuses(board, level.seed, free), // slot key -> 'DL' | 'TL' | 'DW' | 'TW'
     letters, // slot key -> letter on the board
     pending: [], // tiles placed this turn: { slot, letter, from (rack index) }
     rack: [],
@@ -42,6 +47,8 @@ export function createGame(level, board) {
     turnsLeft: level.turns,
     score: 0,
     finished: false,
+    wilds: new Set(), // slots holding a wild tile, which score nothing
+    boost: 1, // multiplies the next word's score: 2 while a double-score token is armed
     history: [], // every turn, with the view each word was played from
   };
   boards.set(game, board);
@@ -85,12 +92,33 @@ export function letterAt(game, key) {
   return game.letters.get(key) ?? game.pending.find((tile) => tile.slot === key)?.letter ?? '';
 }
 
-export function placeTile(game, key, rackIndex) {
+// Places a tile from the rack. A wild tile needs `as`, the letter it stands for.
+export function placeTile(game, key, rackIndex, as = null) {
   if (game.turnsLeft <= 0 || !game.slots.has(key) || letterAt(game, key)) return false;
   if (!Number.isInteger(rackIndex) || rackIndex < 0 || rackIndex >= game.rack.length) return false;
+  const wild = game.rack[rackIndex] === WILD;
+  if (wild && !/^[A-Z]$/.test(as ?? '')) return false;
   const [letter] = game.rack.splice(rackIndex, 1);
-  game.pending.push({ slot: key, letter, from: rackIndex });
+  game.pending.push({ slot: key, letter: wild ? as : letter, wild, from: rackIndex });
   return true;
+}
+
+// Typing up against a letter (or the end of the line): when this turn's
+// tiles sit side by side and the square before them is free, they all move
+// one square back and the new tile takes the last square. So clicking just
+// before ABLE and typing L, O, V, E writes LOVE ending at the A, rather than
+// running out of room after the L. slots is the line in reading order.
+// Returns true if the tile was placed.
+export function placeTileBehind(game, slots, rackIndex, as = null) {
+  const at = game.pending.map((tile) => slots.indexOf(tile.slot)).sort((a, b) => a - b);
+  if (!at.length || at[0] < 1 || at.some((index, i) => index !== at[0] + i)) return false;
+  if (letterAt(game, slots[at[0] - 1])) return false;
+  if (!Number.isInteger(rackIndex) || rackIndex < 0 || rackIndex >= game.rack.length || game.turnsLeft <= 0) return false;
+  if (game.rack[rackIndex] === WILD && !/^[A-Z]$/.test(as ?? '')) return false;
+  const last = slots[at.at(-1)];
+  const back = new Map(game.pending.map((tile) => [tile, slots[slots.indexOf(tile.slot) - 1]]));
+  for (const [tile, slot] of back) tile.slot = slot;
+  return placeTile(game, last, rackIndex, as);
 }
 
 // Takes back the most recently placed tile, returning it to the spot in the
@@ -98,7 +126,7 @@ export function placeTile(game, key, rackIndex) {
 export function undoTile(game) {
   const tile = game.pending.pop();
   if (!tile) return null;
-  game.rack.splice(Math.min(tile.from ?? game.rack.length, game.rack.length), 0, tile.letter);
+  game.rack.splice(Math.min(tile.from ?? game.rack.length, game.rack.length), 0, tile.wild ? WILD : tile.letter);
   return tile.slot;
 }
 
@@ -108,15 +136,84 @@ export function cancelPending(game) {
   return slots;
 }
 
-// Spends a turn sending the whole rack back to the bag, to be refilled in the
-// chamber. Returns false if tiles are on the board or no turns are left.
-export function swapRack(game) {
-  if (game.pending.length || game.turnsLeft <= 0 || !game.rack.length) return false;
-  game.bag.unshift(...game.rack);
-  game.rack = [];
-  game.history.push({ type: 'swap' });
-  game.turnsLeft--;
+// Sends the whole rack back to the bag, to be dealt again, spending a turn
+// unless the swap is free (a power-up). A wild tile is kept. Returns false if
+// tiles are on the board or no turns are left.
+export function swapRack(game, { free = false } = {}) {
+  if (game.pending.length || game.turnsLeft <= 0 || !game.rack.some((letter) => letter !== WILD)) return false;
+  game.bag.unshift(...game.rack.filter((letter) => letter !== WILD));
+  game.rack = game.rack.filter((letter) => letter === WILD);
+  game.history.push({ type: 'swap', free });
+  if (!free) game.turnsLeft--;
   return true;
+}
+
+// Swings the bridge to its other position, carrying any letters on it, and
+// returns the board as it now stands. It costs no turn, so players can try
+// both positions freely, but not while tiles are waiting to be played.
+export function swingBridge(game) {
+  const { bridge } = game.level;
+  if (!bridge || game.pending.length || game.finished) return null;
+  const board = boards.get(game);
+  const from = game.bridge;
+  const to = (from + 1) % bridge.dirs.length;
+  const turns = swingTurns(bridge, from, to);
+  const letters = new Map();
+  for (const [key, letter] of game.letters) {
+    const { cell, normal } = board.slots.get(key);
+    if (!board.bridgeCells.has(cell.join(','))) {
+      letters.set(key, letter);
+      continue;
+    }
+    letters.set(slotKey(swingCell(bridge, cell, turns), faceOf(swingNormal(normal, turns))), letter);
+  }
+  const next = buildBoard({ ...game.level, bridgePosition: to });
+  game.letters = letters;
+  game.bridge = to;
+  game.slots = new Set(next.slots.keys());
+  boards.set(game, next);
+  return { board: next, turns };
+}
+
+// Online play passes the whole game from one device to the next at the end
+// of each turn. snapshot() is the game as plain data (no tiles in mid-air);
+// restore() makes a game match one, rebuilding the board if the swing bridge
+// has turned, and returns the board to draw.
+export function snapshot(game) {
+  return {
+    letters: [...game.letters],
+    wilds: [...game.wilds],
+    bag: [...game.bag],
+    turnsLeft: game.turnsLeft,
+    finished: game.finished,
+    bridge: game.bridge,
+    history: game.history.map(({ type, word, points, player, slots, cyclic, onBridge }) => ({
+      type,
+      word,
+      points,
+      player,
+      slots,
+      cyclic,
+      onBridge,
+    })),
+  };
+}
+
+export function restore(game, data) {
+  cancelPending(game);
+  game.letters = new Map(data.letters);
+  game.wilds = new Set(data.wilds ?? []);
+  game.bag = [...data.bag];
+  game.turnsLeft = data.turnsLeft;
+  game.finished = data.finished;
+  game.history = data.history.map((turn) => ({ ...turn }));
+  if (data.bridge !== game.bridge) {
+    const board = buildBoard({ ...game.level, bridgePosition: data.bridge });
+    game.bridge = data.bridge;
+    game.slots = new Set(board.slots.keys());
+    boards.set(game, board);
+  }
+  return boards.get(game);
 }
 
 export function finishRun(game) {
@@ -155,7 +252,7 @@ export function preparePlay(game, chain, viewDir) {
   if (game.letters.size && !main.slots.some((key) => game.letters.has(key)) && !cross.length) {
     return { error: 'Your word must use a letter already on the board.' };
   }
-  return { viewDir, main, cross, words: [main.word, ...cross.map((word) => word.word)] };
+  return { viewDir, main, cross, cyclic: Boolean(chain.cyclic), words: [main.word, ...cross.map((word) => word.word)] };
 }
 
 // Plays a word in one go with a dictionary that answers straight away, as
@@ -173,13 +270,18 @@ export function playWord(game, chain, viewDir, isWord) {
 export function commitPlay(game, play) {
   const placed = game.pending;
   const fresh = new Set(placed.map((tile) => tile.slot));
+  for (const tile of placed) if (tile.wild) game.wilds.add(tile.slot);
   const main = scoreSlots(game, play.main.slots, fresh);
   const cross = play.cross.map((word) => ({ word: word.word, ...scoreSlots(game, word.slots, fresh) }));
   const bingo = placed.length === RACK_SIZE ? BINGO : 0;
 
   const mainTotal = main.letters * main.wordMultiplier * play.main.surfaces;
-  const total = mainTotal + cross.reduce((sum, word) => sum + word.letters * word.wordMultiplier, 0) + bingo;
+  // An armed double-score token doubles the whole turn, and is used up.
+  const boost = game.boost;
+  game.boost = 1;
+  const total = (mainTotal + cross.reduce((sum, word) => sum + word.letters * word.wordMultiplier, 0) + bingo) * boost;
   const points = {
+    boost,
     letters: main.letters,
     wordMultiplier: main.wordMultiplier,
     surfaces: play.main.surfaces,
@@ -189,9 +291,20 @@ export function commitPlay(game, play) {
     total,
   };
 
+  const board = boards.get(game);
+  const onBridge = play.main.slots.some((key) => board.bridgeCells?.has(board.slots.get(key).cell.join(',')));
   for (const tile of placed) game.letters.set(tile.slot, tile.letter);
   game.pending = [];
-  game.history.push({ type: 'word', view: play.viewDir, word: play.main.word, slots: play.main.slots, placed, points });
+  game.history.push({
+    type: 'word',
+    view: play.viewDir,
+    word: play.main.word,
+    slots: play.main.slots,
+    placed,
+    points,
+    cyclic: play.cyclic,
+    onBridge,
+  });
   game.score += total;
   game.turnsLeft--;
   return { word: play.main.word, placed, points };
@@ -207,7 +320,8 @@ function scoreSlots(game, slots, fresh) {
     const kind = fresh.has(key) ? game.bonuses.get(key) : null;
     const bonus = kind ? BONUS_KINDS[kind] : null;
     if (kind) bonuses.push(kind);
-    letters += LETTER_VALUES[letterAt(game, key)] * (bonus?.letter ?? 1);
+    const value = game.wilds.has(key) ? 0 : LETTER_VALUES[letterAt(game, key)];
+    letters += value * (bonus?.letter ?? 1);
     wordMultiplier *= bonus?.word ?? 1;
   }
   return { letters, wordMultiplier, bonuses };
