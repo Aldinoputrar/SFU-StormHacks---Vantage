@@ -15,7 +15,7 @@
         <button id="overhead" type="button">Overhead view</button>
         <button id="iso" type="button">Isometric view</button>
         <button id="reveal" type="button" disabled>Reveal the trick</button>
-        <button id="lab-open" type="button" title="Walk freely in hyperbolic space">Hyperbolic Lab</button>
+        <button id="lab-open" type="button" title="Walk freely in hyperbolic, flat and spherical space">Hyperbolic Lab</button>
       </div>
     </header>
 
@@ -62,17 +62,17 @@
         <p class="tagline">Scrabble on an impossible monument</p>
         <ol class="intro-steps">
           <li>
-            <strong>Earn letters in curved space.</strong>
-            In the Hyperbolic Chamber, space stretches towards the rim. Pick the crystal that is truly closest.
+            <strong>Earn letters with a small puzzle.</strong>
+            Three balls sit on a squished floor. Click the one that is really closest: count the floor triangles, not the pixels. Better answers give better letters.
           </li>
           <li>
-            <strong>Find the vantage point.</strong>
-            Strips of tiles blocks apart in 3D line up on screen from just the right angle, like a Monument Valley level.
+            <strong>Press Isometric view.</strong>
+            Some rows of tiles are far apart in 3D, but from one special angle they look like a single line, like a Monument Valley level.
           </li>
           <li>
-            <strong>Spell across the illusion.</strong>
-            Type LOVE on the plaza and, from the right corner, it runs on into ABLE on a floating arm: LOVEABLE.
-            Joined words score once per surface.
+            <strong>Click a glowing tile and type a word.</strong>
+            Start on the plaza and let the word run across the gap into ABLE: type T and you have TABLE.
+            Words that cross the gap score double.
           </li>
         </ol>
         <div class="intro-actions">
@@ -92,6 +92,7 @@
         <p id="chamber-prompt"></p>
         <div class="chamber-stage">
           <canvas id="chamber-canvas"></canvas>
+          <canvas id="chamber-paths"></canvas>
           <div id="chamber-labels" class="disk-labels"></div>
         </div>
         <p id="chamber-result" aria-live="polite"></p>
@@ -113,10 +114,15 @@
             <div id="lab-labels" class="disk-labels"></div>
           </div>
           <aside class="lab-panel">
+            <div id="lab-geometry" role="group" aria-label="Geometry">
+              <button type="button" data-curvature="-1" aria-pressed="true">Hyperbolic</button>
+              <button type="button" data-curvature="0" aria-pressed="false">Flat</button>
+              <button type="button" data-curvature="1" aria-pressed="false">Spherical</button>
+            </div>
+            <p id="lab-intro" class="lab-intro"></p>
             <p class="lab-intro">
-              You are the white dot, always at the centre: the plane slides past you. Every floor tile is the same
-              size; the plane only <em>looks</em> squeezed near the rim. The star is home, and a red arrow is painted
-              there pointing north.
+              You are the white dot, always at the centre: the world slides past you and you never turn. The star is
+              home, with a red arrow painted there pointing north.
             </p>
             <p class="lab-help">
               <kbd>W A S D</kbd> or arrow keys to walk · Hold the floor to walk towards it · Click to drop a triangle
@@ -127,7 +133,7 @@
             <p id="lab-status" aria-live="polite"></p>
             <h3>Try this</h3>
             <ol id="lab-goals">
-              <li data-goal="square">Walk a square. Do you get home?</li>
+              <li data-goal="square">Walk a square. Do you get home? Now switch geometry and try again.</li>
               <li data-goal="triangle">Drop three corners. Can the angles reach 180°?</li>
               <li data-goal="walk">Walk out towards the rim. Does it ever get closer?</li>
               <li data-goal="loop">Walk a big loop back to the star. Which way does the arrow point now?</li>

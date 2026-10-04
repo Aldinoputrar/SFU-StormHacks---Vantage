@@ -1,8 +1,19 @@
-// Maths for the Hyperbolic Chamber, in the Poincaré disk model: the whole
-// infinite hyperbolic plane drawn inside a unit disk. Points are complex
-// numbers [re, im] with |z| < 1. Straight lines (geodesics) are arcs that meet
-// the rim at right angles, and distances grow without limit towards the rim,
-// so things near the edge are much farther away than they look.
+import { shuffled } from './random.js';
+
+// Maths for the Hyperbolic Chamber and the Lab, in the Poincaré disk model:
+// the whole infinite hyperbolic plane drawn inside a unit disk. Points are
+// complex numbers [re, im] with |z| < 1. Straight lines (geodesics) are arcs
+// that meet the rim at right angles, and distances grow without limit towards
+// the rim, so things near the edge are much farther away than they look.
+//
+// The same formulas cover all three geometries of constant curvature K, with
+// lengths measured by ds = 2|dz| / (1 + K|z|²):
+//   K = -1  hyperbolic: the Poincaré disk (the default everywhere)
+//   K =  0  flat: the ordinary plane, scaled by 2
+//   K = +1  spherical: a unit sphere seen by stereographic projection, the
+//           unit circle being the equator around the point at the centre
+// Only the sign of K changes the isometry that slides a point to the centre,
+// z -> (z - p) / (1 + K p̄ z), and how distance from the centre grows.
 
 export const ONE = [1, 0];
 export const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
@@ -37,55 +48,74 @@ export function normalized(m) {
 }
 export const IDENTITY = [ONE, [0, 0], [0, 0], ONE];
 
+export const HYPERBOLIC = -1;
+export const FLAT = 0;
+export const SPHERICAL = 1;
+
+// The distance from the centre to a point drawn at Euclidean radius r, and
+// the radius at which a point that far away is drawn.
+export const fromCentre = (r, K = HYPERBOLIC) => (K < 0 ? 2 * Math.atanh(r) : K > 0 ? 2 * Math.atan(r) : 2 * r);
+export const radiusAt = (d, K = HYPERBOLIC) => (K < 0 ? Math.tanh(d / 2) : K > 0 ? Math.tan(d / 2) : d / 2);
+
 // The isometry that slides the disk so point p lands on the centre.
-export const toCentre = (p) => [ONE, neg(p), neg(conj(p)), ONE];
+export const toCentre = (p, K = HYPERBOLIC) => [ONE, neg(p), scaleBy(conj(p), K), ONE];
 
 // A rotation of the whole disk about its centre.
 export const rotation = (angle) => [polar(1, angle), [0, 0], [0, 0], ONE];
 
-// Hyperbolic distance between two points of the disk.
-export function distance(p, q) {
-  const gap = (2 * abs2(sub(p, q))) / ((1 - abs2(p)) * (1 - abs2(q)));
-  return Math.acosh(1 + gap);
+// The distance between two points: slide one to the centre and measure.
+export function distance(p, q, K = HYPERBOLIC) {
+  return fromCentre(abs(apply(toCentre(p, K), q)), K);
 }
 
 // The isometry that moves the world a fraction t of the way along the
 // geodesic from `to` towards `from`: at t = 1 the point `to` sits where
 // `from` was. Used to walk the player to a crystal while the player stays put
 // on screen and the world flows past.
-export function walk(from, to, t) {
-  const v = apply(toCentre(from), to); // the target, seen from the player
+export function walk(from, to, t, K = HYPERBOLIC) {
+  const v = apply(toCentre(from, K), to); // the target, seen from the player
   const r = abs(v);
   if (r < 1e-12) return IDENTITY;
-  const step = scaleBy(v, Math.tanh(t * Math.atanh(r)) / r);
-  return compose(invert(toCentre(from)), compose(toCentre(step), toCentre(from)));
+  const step = scaleBy(v, radiusAt(t * fromCentre(r, K), K) / r);
+  return compose(invert(toCentre(from, K)), compose(toCentre(step, K), toCentre(from, K)));
+}
+
+// The point halfway along the geodesic from p to q.
+export function midpoint(p, q, K = HYPERBOLIC) {
+  const v = apply(toCentre(p, K), q);
+  const r = abs(v);
+  if (r < 1e-12) return p;
+  return apply(invert(toCentre(p, K)), scaleBy(v, radiusAt(fromCentre(r, K) / 2, K) / r));
 }
 
 // The angle at p between the geodesics to q and to r. Sliding p to the centre
 // keeps angles (Möbius maps are conformal) and turns both geodesics into
 // straight diameters, so it is the ordinary angle between two vectors there.
-export function angleAt(p, q, r) {
-  const centred = toCentre(p);
+export function angleAt(p, q, r, K = HYPERBOLIC) {
+  const centred = toCentre(p, K);
   const u = apply(centred, q);
   const v = apply(centred, r);
   const cos = (u[0] * v[0] + u[1] * v[1]) / (abs(u) * abs(v));
   return Math.acos(Math.min(1, Math.max(-1, cos)));
 }
 
-// A geodesic triangle's angles. In a flat plane they add up to π; in the
-// hyperbolic plane (curvature -1) they add up to less, and by Gauss-Bonnet the
-// shortfall is exactly the triangle's area.
-export function triangle(p, q, r) {
-  const angles = [angleAt(p, q, r), angleAt(q, r, p), angleAt(r, p, q)];
+// A geodesic triangle's angles and area. In a flat plane the angles add up
+// to π. By Gauss-Bonnet, with curvature K they add up to π + K × area: less
+// on the hyperbolic plane, more on the sphere, the difference being exactly
+// the area. Flat triangles are ordinary ones, four times their area in z
+// because lengths are doubled.
+export function triangle(p, q, r, K = HYPERBOLIC) {
+  const angles = [angleAt(p, q, r, K), angleAt(q, r, p, K), angleAt(r, p, q, K)];
   const sum = angles[0] + angles[1] + angles[2];
-  return { angles, sum, area: Math.PI - sum };
+  const flat = 2 * Math.abs((q[0] - p[0]) * (r[1] - p[1]) - (r[0] - p[0]) * (q[1] - p[1]));
+  return { angles, sum, area: K ? (sum - Math.PI) / K : flat };
 }
 
 // One step of walking for a player at the centre: the world slides so the
 // point `length` away in direction `heading` comes to the centre. It is a pure
 // translation along a diameter, so the player never turns.
-export function stride(heading, length) {
-  return toCentre(polar(Math.tanh(length / 2), heading));
+export function stride(heading, length, K = HYPERBOLIC) {
+  return toCentre(polar(radiusAt(length, K), heading), K);
 }
 
 // How far an isometry turns things at the centre, in radians: the argument of
@@ -95,13 +125,18 @@ export function turnAtCentre([a, b, c, d]) {
   return Math.atan2(slope[1], slope[0]);
 }
 
-// The mirror circle of a regular {p, q} tiling (p-gons, q meeting at each
-// corner): it carries the central tile's edge whose midpoint lies on the
-// positive real axis. From the right-angled triangle with angles π/p and π/q,
-// cosh(centre to edge) = cos(π/q) / sin(π/p).
-export function tilingMirror(p, q) {
-  const s = Math.tanh(Math.acosh(Math.cos(Math.PI / q) / Math.sin(Math.PI / p)) / 2);
-  return { centre: (1 + s * s) / (2 * s), radius: (1 - s * s) / (2 * s) };
+// The mirror of a regular {p, q} tiling (p-gons, q meeting at each corner):
+// the geodesic carrying the central tile's edge whose midpoint lies on the
+// positive real axis, at s. From the right-angled triangle with angles π/p
+// and π/q, the centre-to-edge distance h has cosh h (hyperbolic) or cos h
+// (spherical) equal to cos(π/q) / sin(π/p); a flat tiling can be any size.
+// Hyperbolic geodesics are circles through s and its inverse 1/s, spherical
+// ones circles through s and its antipode -1/s, flat ones straight lines.
+export function tilingMirror(p, q, K = HYPERBOLIC, flatEdge = 0.36) {
+  const ratio = Math.cos(Math.PI / q) / Math.sin(Math.PI / p);
+  if (!K) return { line: radiusAt(flatEdge, K) };
+  const s = radiusAt(K < 0 ? Math.acosh(ratio) : Math.acos(ratio), K);
+  return { centre: (s * s - K) / (2 * s), radius: (1 + K * s * s) / (2 * s) };
 }
 
 // How big a crystal looks on screen, in disk units, when its round starts.
@@ -154,4 +189,61 @@ export function generateRound(random = Math.random, player = null) {
     return { player: at, crystals, radii, distances, answer };
   }
   throw new Error('Could not lay out a chamber round');
+}
+
+// Points along the circular arc from a through m to b (a straight segment if
+// the three are in line), n + 1 of them including both ends.
+export function arcThrough(a, m, b, n = 48) {
+  const [ax, ay] = a;
+  const [bx, by] = b;
+  const [mx, my] = m;
+  const d = 2 * (ax * (my - by) + mx * (by - ay) + bx * (ay - my));
+  const line = () => Array.from({ length: n + 1 }, (_, i) => add(a, scaleBy(sub(b, a), i / n)));
+  if (Math.abs(d) < 1e-9) return line();
+  const ux = (abs2(a) * (my - by) + abs2(m) * (by - ay) + abs2(b) * (ay - my)) / d;
+  const uy = (abs2(a) * (bx - mx) + abs2(m) * (ax - bx) + abs2(b) * (mx - ax)) / d;
+  const centre = [ux, uy];
+  const radius = abs(sub(a, centre));
+  if (radius > 1e4) return line();
+  const angle = (z) => Math.atan2(z[1] - uy, z[0] - ux);
+  const start = angle(a);
+  // Go round whichever way passes through m.
+  const turn = (z) => (((angle(z) - start) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  const sweep = turn(m) <= turn(b) ? turn(b) : turn(b) - 2 * Math.PI;
+  return Array.from({ length: n + 1 }, (_, i) => add(centre, polar(radius, start + (sweep * i) / n)));
+}
+
+// The length of a path given as points close together.
+export const pathLength = (points, K = HYPERBOLIC) =>
+  points.slice(1).reduce((sum, z, i) => sum + distance(points[i], z, K), 0);
+
+// A "straight line" round, in screen coordinates: the player, a crystal and
+// three paths between them. One is the geodesic, which in the Poincaré disk
+// is an arc bowing towards the centre; one is the Euclidean straight segment,
+// which looks straightest but is longer; the third bows the wrong way, or too
+// far. The geodesic is always the shortest. Both ends sit well out from the
+// centre, where geodesics bow enough to see.
+export function generateStraightRound(random = Math.random) {
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const at = polar(0.55 + 0.15 * random(), 2 * Math.PI * random());
+    const side = random() < 0.5 ? -1 : 1;
+    const target = polar(0.6 + 0.2 * random(), Math.atan2(at[1], at[0]) + side * (1.6 + 0.8 * random()));
+    const gap = distance(at, target);
+    if (gap < 1.3 || gap > 4.2) continue;
+
+    const chordMiddle = scaleBy(add(at, target), 0.5);
+    const middle = midpoint(at, target);
+    const bow = sub(middle, chordMiddle); // how far, and which way, the geodesic bows
+    if (abs(bow) < 0.1) continue;
+    const decoy = random() < 0.5 ? sub(chordMiddle, bow) : add(chordMiddle, scaleBy(bow, 2));
+    if (arcThrough(at, decoy, target).some((z) => abs(z) > 0.95)) continue;
+
+    const kinds = ['geodesic', 'segment', 'decoy'];
+    const order = shuffled([0, 1, 2], random);
+    const middles = { geodesic: middle, segment: chordMiddle, decoy };
+    const paths = order.map((k) => arcThrough(at, middles[kinds[k]], target));
+    const lengths = paths.map((points) => pathLength(points));
+    return { player: at, target, paths, lengths, kinds: order.map((k) => kinds[k]), answer: order.indexOf(0) };
+  }
+  throw new Error('Could not lay out a straight-line round');
 }

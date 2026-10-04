@@ -1,15 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  FLAT,
+  HYPERBOLIC,
   IDENTITY,
+  SPHERICAL,
   abs,
+  arcThrough,
   apply,
   compose,
   distance,
   drawnRadius,
   generateRound,
+  generateStraightRound,
+  midpoint,
   radiusDrawnAs,
   polar,
+  radiusAt,
   rotation,
   stride,
   triangle,
@@ -145,4 +152,119 @@ test('walking round a closed loop turns you by the area it encloses', () => {
   walkTo([0, 0]);
   const { area } = triangle([0, 0], A, B);
   close(Math.abs(turnAtCentre(view)), area, 1e-6);
+});
+
+test('on the sphere, distance from the centre is 2 arctan(r) and the equator is a quarter turn away', () => {
+  close(distance([0, 0], [0.4, 0], SPHERICAL), 2 * Math.atan(0.4));
+  close(distance([0, 0], [1, 0], SPHERICAL), Math.PI / 2);
+  close(distance([0.3, 0.2], [-0.5, 0.6], SPHERICAL), distance([0, 0], apply(toCentre([0.3, 0.2], SPHERICAL), [-0.5, 0.6]), SPHERICAL));
+});
+
+test('a triangle on the sphere with three right angles covers an eighth of it', () => {
+  // The pole and two points on the equator a quarter turn apart.
+  const { angles, sum, area } = triangle([0, 0], [1, 0], [0, 1], SPHERICAL);
+  for (const angle of angles) close(angle, Math.PI / 2);
+  close(sum, (3 * Math.PI) / 2);
+  close(area, (4 * Math.PI) / 8);
+});
+
+test('flat triangles add up to exactly 180°', () => {
+  const random = mulberry32(5);
+  for (let i = 0; i < 50; i++) {
+    const corners = [0, 1, 2].map(() => polar(random(), 2 * Math.PI * random()));
+    close(triangle(...corners, FLAT).sum, Math.PI);
+  }
+  // A right triangle with legs 1 and 1 (0.5 in z, since lengths are doubled).
+  close(triangle([0, 0], [0.5, 0], [0, 0.5], FLAT).area, 0.5);
+});
+
+test('each geometry tiles with triangles whose corners add to 180°, more, or less', () => {
+  const corners = (q, K) => {
+    // Corner distance R of a {3, q} tile: cosh R or cos R = cot(π/3) cot(π/q).
+    const c = 1 / Math.tan(Math.PI / 3) / Math.tan(Math.PI / q);
+    const R = K < 0 ? Math.acosh(c) : Math.acos(c);
+    const r = K < 0 ? Math.tanh(R / 2) : Math.tan(R / 2);
+    return [Math.PI / 3, Math.PI, -Math.PI / 3].map((angle) => polar(r, angle));
+  };
+  for (const [q, K] of [
+    [8, HYPERBOLIC],
+    [4, SPHERICAL],
+  ]) {
+    const { angles } = triangle(...corners(q, K), K);
+    for (const angle of angles) close(angle, (2 * Math.PI) / q, 1e-9);
+  }
+  // The sphere's mirror circle passes through antipodal points of the equator.
+  const { centre, radius } = tilingMirror(3, 4, SPHERICAL);
+  close(radius ** 2, 1 + centre ** 2);
+});
+
+test('a square closes in flat space, and fails on the sphere and the hyperbolic plane', () => {
+  const gap = (K) => {
+    let view = IDENTITY;
+    for (let leg = 0; leg < 4; leg++) view = compose(stride((leg * Math.PI) / 2, 1, K), view);
+    return distance(apply(view, [0, 0]), [0, 0], K);
+  };
+  assert.ok(gap(FLAT) < 1e-9);
+  assert.ok(gap(SPHERICAL) > 0.2, `sphere ${gap(SPHERICAL)}`);
+  assert.ok(gap(HYPERBOLIC) > 0.2, `hyperbolic ${gap(HYPERBOLIC)}`);
+});
+
+test('walking a loop turns you by its area: one way on the sphere, the other on the hyperbolic plane, not at all when flat', () => {
+  const loopTurn = (K) => {
+    const A = polar(radiusAt(1, K), 0);
+    const B = polar(radiusAt(1, K), 1.2);
+    let view = IDENTITY;
+    const walkTo = (target) => {
+      for (let k = 0; k < 400; k++) {
+        const here = apply(view, target);
+        const left = distance([0, 0], here, K);
+        if (left < 1e-9) break;
+        view = compose(stride(Math.atan2(here[1], here[0]), Math.min(left, 0.05), K), view);
+      }
+    };
+    walkTo(A);
+    walkTo(B);
+    walkTo([0, 0]);
+    return { turn: turnAtCentre(view), area: triangle([0, 0], A, B, K).area };
+  };
+  // An anticlockwise loop turns the walker's frame anticlockwise by the area
+  // on the sphere and clockwise on the hyperbolic plane, so the world seen on
+  // screen turns the other way.
+  const sphere = loopTurn(SPHERICAL);
+  const hyperbolic = loopTurn(HYPERBOLIC);
+  close(sphere.turn, -sphere.area, 1e-6);
+  close(hyperbolic.turn, hyperbolic.area, 1e-6);
+  close(loopTurn(FLAT).turn, 0, 1e-9);
+});
+
+test('the midpoint of a geodesic is equally far from both ends', () => {
+  for (const K of [HYPERBOLIC, FLAT, SPHERICAL]) {
+    const p = [0.3, -0.2];
+    const q = [-0.4, 0.5];
+    const m = midpoint(p, q, K);
+    close(distance(p, m, K), distance(m, q, K), 1e-9);
+    close(distance(p, m, K) * 2, distance(p, q, K), 1e-9);
+  }
+});
+
+test('an arc through three points passes through all three', () => {
+  const points = arcThrough([0.1, 0.2], [0.3, 0.5], [0.6, 0.1], 64);
+  close(points[0][0], 0.1);
+  close(points.at(-1)[1], 0.1);
+  assert.ok(points.some((z) => Math.hypot(z[0] - 0.3, z[1] - 0.5) < 0.02));
+  const straight = arcThrough([0, 0], [0.5, 0.5], [1, 1], 4);
+  close(straight[2][0], 0.5);
+});
+
+test('in a straight-line round the geodesic is the shortest path and really is a geodesic', () => {
+  const random = mulberry32(21);
+  for (let i = 0; i < 100; i++) {
+    const { player, target, paths, lengths, kinds, answer } = generateStraightRound(random);
+    assert.equal(kinds[answer], 'geodesic');
+    for (let k = 0; k < 3; k++) if (k !== answer) assert.ok(lengths[k] > lengths[answer] + 1e-3, `${kinds[k]} not longer`);
+    const whole = distance(player, target);
+    close(lengths[answer], whole, 1e-3);
+    for (const z of paths[answer]) close(distance(player, z) + distance(z, target), whole, 1e-6);
+    assert.ok(kinds.includes('segment'));
+  }
 });

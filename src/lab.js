@@ -1,24 +1,38 @@
-import { createDisk } from './disk.js';
-import { IDENTITY, compose, distance, normalized, polar, stride, triangle, turnAtCentre } from './hyperbolic.js';
+import { MEETING, createDisk } from './disk.js';
+import {
+  FLAT,
+  HYPERBOLIC,
+  IDENTITY,
+  SPHERICAL,
+  compose,
+  distance,
+  normalized,
+  polar,
+  radiusAt,
+  stride,
+  triangle,
+  turnAtCentre,
+} from './hyperbolic.js';
 
 // The Hyperbolic Lab: walk freely on the hyperbolic plane and find out what
-// curvature does. The player always stands at the centre of the disk and the
+// curvature does, then switch to the flat plane or the sphere and try the
+// same things. The player always stands at the centre of the disk and the
 // world slides past, one pure translation at a time, so the player never
-// turns. Even so:
+// turns. Even so, unless the world is flat:
 //   - a "square" (four equal legs, four right turns) does not close up,
-//   - triangle corners add up to less than 180°, the shortfall being its area,
+//   - triangle corners do not add up to 180°, the difference being its area,
 //   - walking a loop and coming home turns the world by the area enclosed
 //     (holonomy), which a north arrow painted at home makes visible.
 
-const SPEED = 1.4; // hyperbolic units per second
+const SPEED = 1.4; // units of distance per second
 const HOME = [0, 0];
-const NORTH = polar(Math.tanh(0.45), Math.PI / 2); // the arrow's tip, 0.9 from home
+const ARROW = 0.9; // the north arrow's length
 const PLAYER_RADIUS = 0.14;
 const CORNER_RADIUS = 0.11;
 const CORNER_COLORS = ['#f2777a', '#35b394', '#8c70d8'];
 const TRAIL_STEP = 0.06; // record the path every this far
 const TRAIL_MAX = 4000;
-const SQUARE_SIDE = 1.5;
+const SQUARE_SIDE = 1.2;
 const HOME_RADIUS = 0.25; // this close to home counts as back
 const LOOP_LENGTH = 2.5; // walked at least this far before a return counts as a loop
 const KEYS = {
@@ -32,12 +46,43 @@ const KEYS = {
   d: 0,
 };
 
-const $ = (id) => document.getElementById(id);
 const degrees = (radians) => Math.round((radians * 180) / Math.PI);
 const signedDegrees = (radians) => {
   const d = degrees(radians);
   return d > 0 ? `${d}° anticlockwise` : d < 0 ? `${-d}° clockwise` : '0°';
 };
+const tileAngle = (K) => degrees((2 * Math.PI) / MEETING[K]);
+
+// What to say about each geometry.
+const GEOMETRIES = {
+  [HYPERBOLIC]: {
+    name: 'Hyperbolic',
+    intro: () =>
+      `The hyperbolic plane, infinite, in a Poincaré disk. Every floor tile is the same size; the plane only looks squeezed towards the rim, which is infinitely far away. Each tile has three ${tileAngle(HYPERBOLIC)}° corners: ${3 * tileAngle(HYPERBOLIC)}° in all.`,
+    square: (gap) =>
+      `Four equal sides, four right-angle turns, and you are ${gap} from home. To close up here, a square's corners would have to be sharper than 90°.`,
+    triangle: (sum, area) =>
+      `= <strong>${sum}°</strong>, less than a flat triangle's 180°. The ${180 - sum}° missing is its area: <strong>${area}</strong>.`,
+  },
+  [FLAT]: {
+    name: 'Flat',
+    intro: () =>
+      `The ordinary flat plane, drawn the same way, for comparison. Nothing is squeezed: tiles are the same size everywhere on screen, and each has three ${tileAngle(FLAT)}° corners, 180° in all.`,
+    square: () => 'Four equal sides, four right-angle turns, and you are back home. Only in flat space does a square close.',
+    triangle: (sum, area) => `= <strong>${sum}°</strong>, always, however big. Its area is <strong>${area}</strong>.`,
+  },
+  [SPHERICAL]: {
+    name: 'Spherical',
+    intro: () =>
+      `The surface of a ball, seen from above your head: the rim is your horizon, a quarter of the way round the world. Tiles look bigger towards it. Eight tiles cover the whole world, each with three ${tileAngle(SPHERICAL)}° corners: ${3 * tileAngle(SPHERICAL)}° in all.`,
+    square: (gap) =>
+      `Four equal sides, four right-angle turns, and you are ${gap} from home. To close up on a sphere, a square's corners would have to be wider than 90°.`,
+    triangle: (sum, area) =>
+      `= <strong>${sum}°</strong>, more than a flat triangle's 180°. The extra ${sum - 180}° is its area: <strong>${area}</strong>.`,
+  },
+};
+
+const $ = (id) => document.getElementById(id);
 
 export function createLab({ sound } = {}) {
   const root = $('lab');
@@ -48,17 +93,21 @@ export function createLab({ sound } = {}) {
   const triangleText = $('lab-triangle');
   const status = $('lab-status');
   const goals = $('lab-goals');
+  const intro = $('lab-intro');
+  const switches = [...document.querySelectorAll('#lab-geometry [data-curvature]')];
 
   let disk = null;
+  let K = HYPERBOLIC;
+  let north = polar(radiusAt(ARROW, K), Math.PI / 2); // the arrow's tip
   let trail = []; // world positions the player has passed through
   let corners = []; // world positions of up to three triangle corners
   let walked = 0;
   let sinceHome = 0; // distance walked since last leaving home
   let wasHome = true;
   let lastLoop = null; // { turn } of the last loop walked back home
-  let held = new Set(); // headings of the walking keys held down
+  const held = new Set(); // headings of the walking keys held down
   let pointer = null; // { point, from, start, moved } while the floor is pressed
-  let script = null; // the square walk: { legs, leg, left, start }
+  let script = null; // the square walk: { legs, leg, left }
   let last = 0;
   let onClose = null;
   const done = new Set();
@@ -66,7 +115,7 @@ export function createLab({ sound } = {}) {
   const player = () => disk.toWorld([0, 0]);
 
   function setup() {
-    disk = createDisk(canvas);
+    disk = createDisk(canvas, { curvature: K });
     disk.setAnimationLoop((time) => {
       if (root.hidden) return;
       const dt = Math.min(0.25, (time - (last || time)) / 1000);
@@ -116,6 +165,21 @@ export function createLab({ sound } = {}) {
     $('lab-close').addEventListener('click', close);
     $('lab-reset').addEventListener('click', reset);
     $('lab-square').addEventListener('click', walkSquare);
+    for (const button of switches) {
+      button.addEventListener('click', () => useGeometry(Number(button.dataset.curvature)));
+    }
+    useGeometry(K);
+  }
+
+  // Switches between the hyperbolic plane, the flat plane and the sphere,
+  // starting again from home.
+  function useGeometry(k) {
+    K = k;
+    disk.curvature = k;
+    north = polar(radiusAt(ARROW, k), Math.PI / 2);
+    intro.textContent = GEOMETRIES[k].intro();
+    for (const button of switches) button.setAttribute('aria-pressed', String(Number(button.dataset.curvature) === k));
+    reset();
   }
 
   function resize() {
@@ -160,11 +224,11 @@ export function createLab({ sound } = {}) {
   }
 
   function move(heading, length) {
-    disk.view = normalized(compose(stride(heading, length), disk.view));
+    disk.view = normalized(compose(stride(heading, length, K), disk.view));
     walked += length;
     sinceHome += length;
     const here = player();
-    if (!trail.length || distance(trail.at(-1), here) > TRAIL_STEP) {
+    if (!trail.length || distance(trail.at(-1), here, K) > TRAIL_STEP) {
       trail.push(here);
       if (trail.length > TRAIL_MAX) trail.shift();
     }
@@ -175,7 +239,7 @@ export function createLab({ sound } = {}) {
   // Coming home after a long enough walk closes a loop: the north arrow has
   // turned by the area the loop enclosed.
   function checkHome(here) {
-    const home = distance(here, HOME) < HOME_RADIUS;
+    const home = distance(here, HOME, K) < HOME_RADIUS;
     if (home && !wasHome && sinceHome > LOOP_LENGTH && !script) {
       lastLoop = { turn: turnAtCentre(disk.view) };
       tick('loop');
@@ -201,10 +265,11 @@ export function createLab({ sound } = {}) {
 
   function finishSquare() {
     script = null;
-    const gap = distance(player(), HOME);
-    status.textContent = `Four equal sides, four right-angle turns, and you are ${gap.toFixed(2)} from home. In flat space a square closes; here the corners would have to be sharper than 90°.`;
+    const gap = distance(player(), HOME, K);
+    status.textContent = GEOMETRIES[K].square(gap.toFixed(2));
     tick('square');
-    sound?.wrong();
+    if (gap < 0.01) sound?.right();
+    else sound?.wrong();
   }
 
   function reset() {
@@ -228,14 +293,14 @@ export function createLab({ sound } = {}) {
   function draw() {
     const here = player();
     disk.setSegments([
-      { from: HOME, to: NORTH, color: '#d1495b', dashed: false },
+      { from: HOME, to: north, color: '#d1495b', dashed: false },
       ...corners.flatMap((corner, i) =>
         corners.length === 3 ? [{ from: corner, to: corners[(i + 1) % 3], color: '#4a3f57', dashed: false }] : [],
       ),
     ]);
     disk.setMarkers([
       { at: HOME, radius: 0.16, color: '#f4b942', style: 'star' },
-      { at: NORTH, radius: 0.07, color: '#d1495b' },
+      { at: north, radius: 0.07, color: '#d1495b' },
       ...corners.map((at, i) => ({ at, radius: CORNER_RADIUS, color: CORNER_COLORS[i] })),
       { at: here, radius: PLAYER_RADIUS, color: '#ffffff', style: 'player' },
     ]);
@@ -244,28 +309,43 @@ export function createLab({ sound } = {}) {
   }
 
   // The path walked, drawn as short straight pieces between nearby points,
-  // which is close enough to the geodesics between them.
+  // which is close enough to the geodesics between them. On the sphere the
+  // path can go over the horizon, so it is clipped to the disk and broken
+  // where it leaves the visible hemisphere.
   function drawTrail() {
     const ctx = trailCanvas.getContext('2d');
     const ratio = trailCanvas.width / trailCanvas.getBoundingClientRect().width || 1;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
     if (trail.length < 2) return;
+    const { box, scale } = disk.frame();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(box.width / 2, box.height / 2, scale, 0, 2 * Math.PI);
+    ctx.clip();
     ctx.strokeStyle = 'rgba(43, 108, 138, 0.75)';
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.beginPath();
-    [...trail, player()].forEach((z, i) => {
+    let drawing = false;
+    for (const z of [...trail, player()]) {
+      const [sx, sy] = disk.toScreen(z);
+      if (!(Math.hypot(sx, sy) < 1.5)) {
+        drawing = false;
+        continue;
+      }
       const [x, y] = disk.pixelOf(z);
-      if (i) ctx.lineTo(x, y);
+      if (drawing) ctx.lineTo(x, y);
       else ctx.moveTo(x, y);
-    });
+      drawing = true;
+    }
     ctx.stroke();
+    ctx.restore();
   }
 
   function drawReadout(here) {
-    const fromHome = distance(here, HOME);
+    const fromHome = distance(here, HOME, K);
     const home = fromHome < HOME_RADIUS;
     const rows = [
       ['From home', fromHome.toFixed(2)],
@@ -273,7 +353,11 @@ export function createLab({ sound } = {}) {
     ];
     if (lastLoop) {
       rows.push(['Last loop turned the world', signedDegrees(lastLoop.turn)]);
-      rows.push(['…so it enclosed an area of', Math.abs(lastLoop.turn).toFixed(2)]);
+      rows.push(
+        K
+          ? ['…so it enclosed an area of', Math.abs(lastLoop.turn).toFixed(2)]
+          : ['Flat space has no curvature', 'so loops never turn it'],
+      );
     } else if (home) {
       rows.push(['North arrow', signedDegrees(turnAtCentre(disk.view))]);
     }
@@ -281,8 +365,8 @@ export function createLab({ sound } = {}) {
     if (readout.innerHTML !== html) readout.innerHTML = html;
 
     if (corners.length === 3) {
-      const { angles, sum, area } = triangle(...corners);
-      const text = `Angles ${angles.map(degrees).join('° + ')}° = <strong>${degrees(sum)}°</strong> (a flat triangle: 180°). The ${degrees(Math.PI - sum)}° missing is its area: <strong>${area.toFixed(2)}</strong>.`;
+      const { angles, sum, area } = triangle(...corners, K);
+      const text = `Angles ${angles.map(degrees).join('° + ')}° ${GEOMETRIES[K].triangle(degrees(sum), area.toFixed(2))}`;
       if (triangleText.innerHTML !== text) triangleText.innerHTML = text;
       if (labels.childElementCount !== 3) {
         labels.replaceChildren(
@@ -299,6 +383,7 @@ export function createLab({ sound } = {}) {
         label.textContent = `${degrees(angles[i])}°`;
         label.style.left = `${x}px`;
         label.style.top = `${y}px`;
+        label.hidden = !(Math.hypot(...disk.toScreen(corner)) < 1);
       });
     } else {
       const text = corners.length

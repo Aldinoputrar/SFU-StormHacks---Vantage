@@ -4,7 +4,7 @@ Scrabble, if the board were an impossible object.
 
 ## What it is
 
-A single-player word puzzle in two parts. In the **Hyperbolic Chamber** you earn your letters by judging distance in curved space; on the **monument**, an Escher-like structure in the style of Monument Valley, you play them as words along lines that only join up from the right viewpoint. Between turns, the **Hyperbolic Lab** lets you walk the hyperbolic plane freely and find out for yourself what curvature does.
+A single-player word puzzle in two parts. In the **Hyperbolic Chamber** you earn your letters by judging distance in curved space; on the **monument**, an Escher-like structure in the style of Monument Valley, you play them as words along lines that only join up from the right viewpoint. Between turns, the **Hyperbolic Lab** lets you walk the hyperbolic plane freely, compare it with flat space and the sphere, and find out for yourself what curvature does.
 
 | Game | What we took from it |
 | --- | --- |
@@ -34,11 +34,24 @@ One connected monument: a sand plaza (a 5×5 Scrabble board on top), a lavender 
 
 Before each turn you earn letters in a short minigame (about 30 seconds) set in the Poincaré disk, a model of the infinite hyperbolic plane drawn inside a circle.
 
+Each visit has three rounds of two kinds.
+
+**Closest crystal** (rounds 1 and 3):
+
 - You stand off-centre with three crystals that look about equally far away (within ±8% on screen) and about equally big. Pick the one that is **truly** closest.
 - The crystals differ in true size so that they *look* the same size. With equal true sizes the biggest-looking crystal would always be the answer (it sits where space is least stretched), and a round could be won without reading the floor; now it is the answer only about a third of the time.
 - The floor is a tiling of triangles, eight at each corner. Every triangle is the same size in hyperbolic terms, so they shrink towards the rim, and counting tiles is a fair way to judge distance. The crystal that looks nearest is never the answer: space near the rim is much bigger than it looks.
 - After you choose, dashed geodesics (the hyperbolic "straight lines") show each true distance, one dash per half unit, and you walk to the closest crystal while the world flows past and the others sink towards the rim.
-- Three rounds per visit. Each correct answer improves your letters: every new tile is the best of (correct answers + 1) draws from the bag, favouring vowels when your rack is short of them, then high-scoring letters.
+
+**Find the straight line** (round 2):
+
+- Three paths lead to a gold crystal: the true geodesic, the Euclidean straight segment, and an arc bent the wrong way or too far. Pick the one that is truly straight, the shortest way there.
+- The segment looks straightest but is longer. In the Poincaré disk geodesics are arcs that would meet the rim at right angles, so they bow towards the centre, where space is least stretched. After you choose, each path is labelled with its true length and you walk the geodesic to the crystal.
+- The round starts with the world sliding you out towards the rim, where geodesics bow enough to see.
+
+**Scoring and the lesson:**
+
+- Each correct answer improves your letters: every new tile is the best of (correct answers + 1) draws from the bag, favouring vowels when your rack is short of them, then high-scoring letters.
 - After the last round the three crystals slide to the middle and become a **geodesic triangle**, labelled with its angles. They always add up to less than 180°, and the shortfall is exactly the triangle's area (Gauss–Bonnet). The floor tiles are triangles too, each with three 45° corners.
 - From the second visit on you can skip the chamber for a plain draw.
 
@@ -46,12 +59,20 @@ You visit the chamber at the start, after every word, and after a swap. The rack
 
 ## The Hyperbolic Lab
 
-A sandbox on the same hyperbolic floor, open from the title screen or between turns. You are always at the centre of the disk and the plane slides past you, one pure translation at a time, so you never turn. Even so:
+A sandbox open from the title screen or between turns, with a switch between three geometries: the **hyperbolic** plane (the default), the **flat** plane and the **sphere**, all drawn the same way and run by the same code with a different curvature. You are always at the centre of the disk and the world slides past you, one pure translation at a time, so you never turn. Try each experiment in each geometry:
 
-- **A square does not close.** *Walk a square for me* walks 1.5 up, 1.5 right, 1.5 down and 1.5 left, turning 90° each time. You end up nearly 3 units from home: in hyperbolic space a four-sided figure with equal sides needs corners sharper than 90° to close.
-- **Triangles come up short.** Click three points to drop a triangle; its angles are labelled live and add up to less than 180°, the missing angle being its area. Small triangles are almost flat; huge ones have angles near 0°.
+| | Flat | Hyperbolic | Spherical |
+| --- | --- | --- | --- |
+| Floor tiles | triangles with 60° corners, 6 at a point | 45° corners, 8 at a point | 90° corners, 4 at a point: eight tiles cover the world |
+| *Walk a square* (1.2 up, right, down, left) | back home | 1.57 from home | 0.87 from home |
+| A triangle's angles | always 180° | less: π − sum is its area | more: sum − π is its area |
+| A loop back home turns the north arrow | never | by the area enclosed | by the area enclosed, the other way |
+| How the map looks | the same everywhere | squeezed towards the rim, infinitely far away | stretched towards the rim, which is your horizon |
+
+- **A square does not close.** *Walk a square for me* walks four equal legs with right-angle turns. Only on the flat plane do you get home. On the hyperbolic plane a closed four-sided figure with equal sides needs corners sharper than 90°; on the sphere, wider.
+- **Triangles.** Click three points to drop a triangle; its angles are labelled live, with the sum and the area. Small triangles are almost flat everywhere.
 - **Walking a loop turns the world.** A red arrow is painted at home pointing north. Walk any big loop back to the star and the arrow points somewhere else, turned by exactly the area your loop enclosed (holonomy). The lab reads off the angle and the area.
-- **The rim never gets closer.** Walk towards the edge as long as you like; it recedes, because it is infinitely far away.
+- **The rim never gets closer** on the hyperbolic plane; walk towards it as long as you like.
 
 Controls: <kbd>W A S D</kbd> or arrow keys to walk, hold the floor to walk towards the pointer, click to drop a triangle corner, <kbd>Esc</kbd> to leave.
 
@@ -106,15 +127,18 @@ Run `npm run vantages` to list every vantage point in a level and the strips tha
 
 ## The hyperbolic maths
 
-[`src/hyperbolic.js`](src/hyperbolic.js) works in the Poincaré disk with points as complex numbers:
+[`src/hyperbolic.js`](src/hyperbolic.js) works in the Poincaré disk with points as complex numbers. Every formula carries a curvature K (−1 hyperbolic by default, 0 flat, +1 spherical), and only its sign changes:
 
-- **Distance:** d(p, q) = arcosh(1 + 2|p − q|² / ((1 − |p|²)(1 − |q|²))). Near the rim the denominator vanishes, which is why the rim is so far away.
+- **Lengths** are ds = 2|dz| / (1 + K|z|²). For K = −1 that is the Poincaré disk; for K = +1 it is a unit sphere seen by stereographic projection, the unit circle being the equator around you; for K = 0 it is the flat plane, scaled by 2.
+- **Sliding a point p to the centre** is z ↦ (z − p) / (1 + K p̄ z), an isometry in every geometry. Everything else is built from it.
+- **Distance from the centre** to a point drawn at radius r is 2 artanh r, 2r or 2 arctan r. To measure any distance d(p, q), slide p to the centre and measure there. Near the hyperbolic rim artanh blows up, which is why the rim is so far away.
 - **Isometries** are Möbius transformations z ↦ (az + b)/(cz + d). The camera is one of them, so walking means composing a hyperbolic translation along the geodesic to the crystal, and the shader maps each pixel back through the inverse.
-- **The tiling** is drawn per pixel by reflecting the point into one triangle of a {3, 8} tiling (two straight mirrors and one circle orthogonal to the rim, found from cosh(centre to edge) = cos(π/q) / sin(π/p)); the parity of the reflections two-colours the tiles ([`src/disk.js`](src/disk.js)).
+- **The tiling** is drawn per pixel by reflecting the point into one triangle of a {3, q} tiling, q = 8, 6 or 4, and counting the reflections to two-colour the tiles ([`src/disk.js`](src/disk.js)). Two of the mirrors are straight lines through the centre. The third carries the tile's edge at distance h, where cosh h (hyperbolic) or cos h (spherical) is cos(π/q) / sin(π/p): a circle through the edge's midpoint s and its inverse 1/s on the hyperbolic plane, through s and its antipode −1/s on the sphere, and a straight line on the flat plane.
 - **Geodesics** are drawn per pixel too: each segment's start is slid to the centre by a Möbius map, where the geodesic is a straight diameter, so a pixel is on the segment when it lies close to that diameter.
 - **Crystal sizes.** A hyperbolic disk of radius ρ centred at Euclidean distance a from the centre is drawn with Euclidean radius b(1 − a²) / (1 − a²b²), where b = tanh(ρ/2). Solving the quadratic e·a²·b² + (1 − a²)·b − e = 0 for b gives the true radius that looks like any chosen size e (`radiusDrawnAs`).
-- **Angles** at a corner p are measured by sliding p to the centre: Möbius maps keep angles, and the two geodesics become diameters, so the angle is the ordinary angle between two vectors (`angleAt`). By Gauss–Bonnet with curvature −1, a triangle's area is π minus its angle sum (`triangle`).
-- **Walking** in the lab is a pure translation along a diameter, z ↦ (z − s) / (1 − s̄z) with |s| = tanh(step/2) (`stride`), so the player never rotates. After a closed loop the accumulated map fixes the centre and is a rotation; its angle, the argument of the derivative (ad − bc)/d² at the centre (`turnAtCentre`), equals the enclosed area. The tests check this to within 10⁻⁶ by walking a triangle and comparing with Gauss–Bonnet ([`test/hyperbolic.test.js`](test/hyperbolic.test.js)).
+- **Angles** at a corner p are measured by sliding p to the centre: Möbius maps keep angles, and the two geodesics become diameters, so the angle is the ordinary angle between two vectors (`angleAt`). By Gauss–Bonnet a triangle's angles add up to π + K × area, so its area is (sum − π) / K (`triangle`).
+- **The straight-line round** draws each path as a circular arc through its ends and a middle point: the geodesic's true midpoint, the Euclidean midpoint, or a decoy. Lengths are summed along 48 short pieces (`arcThrough`, `pathLength`); the tests check the geodesic's points satisfy d(p, z) + d(z, q) = d(p, q).
+- **Walking** in the lab is a pure translation along a diameter, z ↦ (z − s) / (1 + K s̄z) with s a step's length away (`stride`), so the player never rotates. After a closed loop the accumulated map fixes the centre and is a rotation; its angle, the argument of the derivative (ad − bc)/d² at the centre (`turnAtCentre`), equals the enclosed area, with opposite signs on the sphere and the hyperbolic plane, and is zero on the flat plane. The tests check this to within 10⁻⁶ in all three geometries by walking a triangle and comparing with Gauss–Bonnet ([`test/hyperbolic.test.js`](test/hyperbolic.test.js)).
 
 ## Why impossible geometry?
 
@@ -147,8 +171,8 @@ npm run build     # production build in dist/
 ### Controls
 
 - **Chamber:** click a crystal (or press 1, 2, 3 or A, B, C).
-- **Lab:** W A S D or arrow keys to walk, hold the floor to walk towards it, click to drop triangle corners.
-- **Drag** to orbit, **scroll** to zoom. The game starts in an overhead view; **Overhead view** returns to it and **Isometric view** jumps to the home vantage point. Let go near a vantage point and the camera snaps to it; joined lines glow.
+- **Lab:** W A S D or arrow keys to walk, hold the floor to walk towards it, click to drop triangle corners, and switch between hyperbolic, flat and spherical.
+- **Drag** to orbit, **scroll** to zoom. Hovering a tile lights the line a click would choose. The game starts in an overhead view; **Overhead view** returns to it and **Isometric view** jumps to the home vantage point. Let go near a vantage point and the camera snaps to it; joined lines glow.
 - **Click a tile** to lock the view and pick the line through it. Click the same tile again, or the switch button, to change to the other line through it.
 - **Choose your direction.** The heading shows Across, Down or Diagonal before you type. Across is chosen first where lines cross; the switch button names the other direction.
 - **Covered squares stay in the line.** Clicks on the board always pick the surface you can see. Squares underneath another block have a dashed mark in the word strip: click them there to type on them. Letters stay on their own block.
@@ -165,10 +189,10 @@ npm run build     # production build in dist/
 | [`src/game.js`](src/game.js) | Rules: rack, placing, connecting, cross-words, scoring, swap, end of run |
 | [`src/bonuses.js`](src/bonuses.js) | Where the DL / TL / DW / TW squares go |
 | [`src/dictionary.js`](src/dictionary.js) | Merriam-Webster lookups with the offline fallback |
-| [`src/hyperbolic.js`](src/hyperbolic.js) | Poincaré disk maths: distance, Möbius maps, triangles, walking, chamber rounds |
-| [`src/disk.js`](src/disk.js) | The shared Poincaré disk renderer: tiling, geodesics and markers in one shader |
+| [`src/hyperbolic.js`](src/hyperbolic.js) | Disk maths for curvature −1, 0 and +1: distance, Möbius maps, triangles, walking, chamber rounds |
+| [`src/disk.js`](src/disk.js) | The shared disk renderer: tiling, geodesics and markers in one shader, for all three geometries |
 | [`src/chamber.js`](src/chamber.js) | The Hyperbolic Chamber screen |
-| [`src/lab.js`](src/lab.js) | The Hyperbolic Lab: free walking, triangles, the square walk and holonomy |
+| [`src/lab.js`](src/lab.js) | The Hyperbolic Lab: free walking, triangles, the square walk and holonomy, in three geometries |
 | [`src/audio.js`](src/audio.js) | Synthesised sound |
 | [`src/scene.js`](src/scene.js) | Drawing the monument and its tiles |
 | [`src/placement.js`](src/placement.js) | Which line a click picks first, and its direction on screen (Across, Down, Diagonal) |
@@ -189,5 +213,7 @@ npm run build     # production build in dist/
 - [x] Title screen, first-turn guidance and end screen
 - [x] Sound
 - [x] Hyperbolic Lab: free walking, triangles and holonomy
+- [x] Flat and spherical geometry in the lab, for comparison
+- [x] A straight-line round in the chamber
 - [x] Compass of vantage points
 - [ ] Leaderboard

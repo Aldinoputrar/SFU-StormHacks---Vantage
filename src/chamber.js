@@ -1,15 +1,33 @@
 import { createDisk } from './disk.js';
-import { IDENTITY, compose, distance, generateRound, normalized, rotation, triangle, walk } from './hyperbolic.js';
+import {
+  CRYSTAL_LOOK,
+  IDENTITY,
+  abs,
+  compose,
+  distance,
+  generateRound,
+  generateStraightRound,
+  normalized,
+  radiusDrawnAs,
+  rotation,
+  triangle,
+  walk,
+} from './hyperbolic.js';
 
 // The Hyperbolic Chamber: a short minigame played before each turn to earn
-// letters. The player stands in a Poincaré disk with three crystals that look
-// about equally far away and equally big; only one is truly the closest.
-// Every tile of the triangle tiling is the same size in hyperbolic terms, so
-// tiles shrink towards the rim and counting them is a fair way to judge
-// distance. After the last round, the three crystals mark a triangle whose
-// angles add up to less than 180°.
+// letters, in a Poincaré disk. Every tile of the triangle tiling is the same
+// size in hyperbolic terms, so tiles shrink towards the rim and counting them
+// is a fair way to judge distance. Two kinds of round:
+//   closest   three crystals look about equally far away and equally big;
+//             only one is truly the closest.
+//   straight  three paths lead to a crystal; only one is the geodesic, and it
+//             is not the one that looks straight.
+// After the last round, the three crystals mark a triangle whose angles add
+// up to less than 180°.
 
-const ROUNDS = 3;
+const KINDS = ['closest', 'straight', 'closest']; // the last must be closest, for the triangle
+const ROUNDS = KINDS.length;
+const TARGET_COLOR = '#f4b942';
 const PLAYER_RADIUS = 0.16; // hyperbolic
 const WALK_MS = 1300;
 const SPIN_MS = 700;
@@ -21,15 +39,25 @@ const CRYSTALS = [
 const TRIANGLE_INK = '#4a3f57';
 const SKIP = Symbol('skip');
 
+// Pixel distance from point p to the segment from a to b.
+function toSegment([px, py], [ax, ay], [bx, by]) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
+
 const $ = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ease = (t) => 1 - (1 - t) ** 3;
 const fixed = (d) => d.toFixed(1);
+const lengthText = (d) => d.toFixed(2);
 const degrees = (radians) => Math.round((radians * 180) / Math.PI);
 
 export function createChamber({ sound } = {}) {
   const root = $('chamber');
   const canvas = $('chamber-canvas');
+  const overlay = $('chamber-paths');
   const labels = $('chamber-labels');
   const prompt = $('chamber-prompt');
   const result = $('chamber-result');
@@ -39,7 +67,9 @@ export function createChamber({ sound } = {}) {
 
   let disk = null;
   let player = null; // the player's world position
-  let round = null; // { crystals (world), radii, distances, answer, pick, revealed }
+  // closest: { kind, crystals (world), radii, distances, answer, goal, pick, revealed }
+  // straight: { kind, target (world), paths (world), lengths, kinds, answer, goal, pick, revealed }
+  let round = null;
   let reveal = 0; // 0..1: how much of the geodesics to show
   let lesson = null; // the triangle shown after the last round
   let animation = null;
@@ -53,13 +83,23 @@ export function createChamber({ sound } = {}) {
       draw();
       disk.render();
     });
-    canvas.addEventListener('pointerup', (event) => onPick?.(crystalAt(event)));
+    canvas.addEventListener('pointerup', (event) =>
+      onPick?.(round.kind === 'straight' ? pathAt(event) : crystalAt(event)),
+    );
     window.addEventListener('keydown', (event) => {
       if (root.hidden || !onPick) return;
       const index = ['1', '2', '3'].indexOf(event.key) + 1 || ['a', 'b', 'c'].indexOf(event.key.toLowerCase()) + 1;
       if (index) onPick(index - 1);
     });
-    window.addEventListener('resize', () => !root.hidden && disk.resize());
+    window.addEventListener('resize', () => !root.hidden && resize());
+  }
+
+  function resize() {
+    disk.resize();
+    const box = overlay.getBoundingClientRect();
+    const ratio = Math.min(window.devicePixelRatio, 2);
+    overlay.width = box.width * ratio;
+    overlay.height = box.height * ratio;
   }
 
   function crystalAt(event) {
@@ -71,8 +111,83 @@ export function createChamber({ sound } = {}) {
     return near[best] < 0.25 ? best : null;
   }
 
+  // The path nearest the pointer, if it is within a finger's width.
+  function pathAt(event) {
+    const box = canvas.getBoundingClientRect();
+    const x = event.clientX - box.left;
+    const y = event.clientY - box.top;
+    const near = round.paths.map((points) => {
+      const pixels = points.map(disk.pixelOf);
+      let best = Infinity;
+      for (let i = 1; i < pixels.length; i++) best = Math.min(best, toSegment([x, y], pixels[i - 1], pixels[i]));
+      return best;
+    });
+    const best = near.indexOf(Math.min(...near));
+    return near[best] < 26 ? best : null;
+  }
+
   function draw() {
     if (!round) return;
+    const ctx = overlay.getContext('2d');
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    if (round.kind === 'straight') drawStraight(ctx);
+    else drawClosest();
+  }
+
+  // The straight-line round: the crystal, the player and three paths.
+  function drawStraight(ctx) {
+    const { target, paths, pick, answer, revealed } = round;
+    disk.setSegments([]);
+    disk.setMarkers([
+      { at: target, radius: round.targetRadius, color: TARGET_COLOR },
+      { at: player, radius: PLAYER_RADIUS, color: '#ffffff', style: 'player' },
+    ]);
+    const ratio = overlay.width / overlay.getBoundingClientRect().width || 1;
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    paths.forEach((points, i) => {
+      const faded = revealed && i !== answer && i !== pick;
+      ctx.globalAlpha = faded ? 0.3 : 1;
+      if (revealed && i === answer) {
+        ctx.strokeStyle = 'rgba(255, 213, 74, 0.9)';
+        ctx.lineWidth = 11;
+        stroke(ctx, points);
+      }
+      ctx.strokeStyle = CRYSTALS[i].color;
+      ctx.lineWidth = i === pick ? 6 : 4;
+      stroke(ctx, points);
+    });
+    ctx.globalAlpha = 1;
+    // Labels sit at the middle of each path, pushed out to the side it bows
+    // towards, so they do not pile up where the paths are close.
+    const [ex, ey] = disk.pixelOf(paths[0][0]);
+    const [fx, fy] = disk.pixelOf(paths[0].at(-1));
+    const chord = [(ex + fx) / 2, (ey + fy) / 2];
+    paths.forEach((points, i) => {
+      const [x, y] = disk.pixelOf(points[Math.floor(points.length / 2)]);
+      const away = Math.hypot(x - chord[0], y - chord[1]);
+      const push = away > 1 ? 14 / away : 0;
+      place(labels.children[i], [x + (x - chord[0]) * push, y + (y - chord[1]) * push]);
+    });
+  }
+
+  function stroke(ctx, points) {
+    ctx.beginPath();
+    points.forEach((z, i) => {
+      const [x, y] = disk.pixelOf(z);
+      if (i) ctx.lineTo(x, y);
+      else ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  function place(label, [x, y]) {
+    label.style.left = `${x}px`;
+    label.style.top = `${y}px`;
+  }
+
+  function drawClosest() {
     const { crystals, radii, pick, answer, revealed } = round;
     disk.setMarkers([
       ...crystals.map((at, i) => ({
@@ -89,12 +204,7 @@ export function createChamber({ sound } = {}) {
         ? [0, 1, 2].map((i) => ({ from: crystals[i], to: crystals[(i + 1) % 3], color: TRIANGLE_INK, dashed: false }))
         : crystals.map((to, i) => ({ from: player, to, color: CRYSTALS[i].color, reveal })),
     );
-    crystals.forEach((z, i) => {
-      const [x, y] = disk.pixelOf(z);
-      const label = labels.children[i];
-      label.style.left = `${x}px`;
-      label.style.top = `${y}px`;
-    });
+    crystals.forEach((z, i) => place(labels.children[i], disk.pixelOf(z)));
   }
 
   function animate(ms, step) {
@@ -111,12 +221,34 @@ export function createChamber({ sound } = {}) {
     });
   }
 
-  // Lays out a round around the player's spot on screen.
-  function startRound(index) {
+  // Lays out a round around the player's spot on screen. A straight-line
+  // round needs the player out towards the rim, so the world first slides
+  // them there.
+  async function startRound(index) {
     const spot = player ? disk.toScreen(player) : null;
-    const layout = generateRound(Math.random, spot);
-    player = disk.toWorld(layout.player);
-    round = { ...layout, crystals: layout.crystals.map(disk.toWorld), pick: -1, revealed: false };
+    const kind = KINDS[index];
+    if (kind === 'straight') {
+      const layout = generateStraightRound(Math.random);
+      round = null;
+      labels.replaceChildren();
+      if (spot) await slide(spot, layout.player);
+      const target = disk.toWorld(layout.target);
+      round = {
+        ...layout,
+        kind,
+        target,
+        targetRadius: radiusDrawnAs(abs(layout.target), CRYSTAL_LOOK),
+        paths: layout.paths.map((points) => points.map(disk.toWorld)),
+        goal: target,
+      };
+      player = disk.toWorld(layout.player);
+    } else {
+      const layout = generateRound(Math.random, spot);
+      const crystals = layout.crystals.map(disk.toWorld);
+      round = { ...layout, kind, crystals, goal: crystals[layout.answer] };
+      player = disk.toWorld(layout.player);
+    }
+    Object.assign(round, { pick: -1, revealed: false });
     reveal = 0;
     roundText.textContent = `Round ${index + 1} of ${ROUNDS}`;
     labels.replaceChildren(
@@ -142,6 +274,7 @@ export function createChamber({ sound } = {}) {
   function showAnswer(pick) {
     round.pick = pick;
     round.revealed = true;
+    if (round.kind === 'straight') return showStraightAnswer(pick);
     const { distances, answer } = round;
     [...labels.children].forEach((label, i) => {
       label.textContent = `${CRYSTALS[i].name} · ${fixed(distances[i])}`;
@@ -156,18 +289,49 @@ export function createChamber({ sound } = {}) {
     return animate(700, (t) => (reveal = t)).then(() => right);
   }
 
-  // Walks the player to the closest crystal: the player stays put on screen
-  // and the world flows past, so the far crystals sink towards the rim.
+  function showStraightAnswer(pick) {
+    const { lengths, kinds, answer } = round;
+    [...labels.children].forEach((label, i) => {
+      label.textContent = `${CRYSTALS[i].name} · ${lengthText(lengths[i])}`;
+      label.classList.toggle('answer', i === answer);
+    });
+    const right = pick === answer;
+    sound?.[right ? 'right' : 'wrong']();
+    const segment = kinds.indexOf('segment');
+    const name = (i) => CRYSTALS[i].name;
+    if (right) {
+      result.textContent = `Yes! ${name(answer)} is the straight line, ${lengthText(lengths[answer])} long. The one that looks straight, ${name(segment)}, is ${lengthText(lengths[segment])}.`;
+    } else if (pick === segment) {
+      result.textContent = `It looks straight, but ${name(pick)} is ${lengthText(lengths[pick])} long. ${name(answer)} is shorter, ${lengthText(lengths[answer])}: straight lines here bow towards the centre, where space is least stretched.`;
+    } else {
+      result.textContent = `Not quite: ${name(pick)} is ${lengthText(lengths[pick])} long, ${name(answer)} only ${lengthText(lengths[answer])}. Straight lines here are arcs that would meet the rim at right angles.`;
+    }
+    result.className = right ? 'right' : 'wrong';
+    return wait(700).then(() => right);
+  }
+
+  // Walks the player to the round's goal: the player stays put on screen and
+  // the world flows past, so the far crystals sink towards the rim. The walk
+  // follows the geodesic, so in a straight-line round it runs along the answer.
   async function walkToAnswer() {
     const start = disk.view;
     const spot = disk.toScreen(player);
-    const to = disk.toScreen(round.crystals[round.answer]);
+    const to = disk.toScreen(round.goal);
     sound?.walk();
     await animate(WALK_MS, (t) => {
       disk.view = normalized(compose(walk(spot, to, t), start));
       player = disk.toWorld(spot);
     });
-    player = round.crystals[round.answer];
+    player = round.goal;
+  }
+
+  // Moves the world so the player's spot on screen goes from one point to
+  // another along a geodesic, keeping the player on it.
+  async function slide(from, to) {
+    const start = disk.view;
+    const here = player;
+    await animate(SPIN_MS, (t) => (disk.view = normalized(compose(walk(to, from, t), start))));
+    player = here;
   }
 
   // Turns the whole world about the centre, so the next round starts from a
@@ -211,7 +375,7 @@ export function createChamber({ sound } = {}) {
   async function play({ title, skippable = false }) {
     root.hidden = false;
     if (!disk) setup();
-    disk.resize();
+    resize();
     disk.view = IDENTITY;
     animation = null;
     player = null;
@@ -228,12 +392,16 @@ export function createChamber({ sound } = {}) {
 
     try {
       for (let index = 0; index < ROUNDS; index++) {
-        startRound(index);
+        await unlessSkipped(startRound(index));
         result.textContent = '';
-        prompt.textContent =
-          index === 0
-            ? 'Space stretches towards the rim: every floor tile is the same size. Which crystal is truly closest to you?'
-            : 'Which crystal is truly closest? Count the tiles, not the pixels.';
+        if (KINDS[index] === 'straight') {
+          prompt.textContent = 'Three paths lead to the gold crystal. Which one is truly straight: the shortest way there?';
+        } else {
+          prompt.textContent =
+            index === 0
+              ? 'Space stretches towards the rim: every floor tile is the same size. Which crystal is truly closest to you?'
+              : 'Which crystal is truly closest? Count the tiles, not the pixels.';
+        }
         const pick = await unlessSkipped(choose());
         sound?.pick();
         if (await unlessSkipped(showAnswer(pick))) score++;
@@ -258,7 +426,7 @@ export function createChamber({ sound } = {}) {
     result.textContent =
       score === ROUNDS
         ? 'Perfect: each new letter is the best of four draws.'
-        : `You found the closest crystal ${score} of ${ROUNDS} times: each new letter is the best of ${score + 1} draw${score ? 's' : ''}.`;
+        : `You won ${score} of ${ROUNDS} rounds: each new letter is the best of ${score + 1} draw${score ? 's' : ''}.`;
     await waitForButton('Collect your letters');
     root.hidden = true;
     return { score, skipped: false };

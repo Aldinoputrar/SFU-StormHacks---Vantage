@@ -130,3 +130,15 @@ test('clicking a horizontal ledge over a vertical strip places CHAR across the u
     sceneView.dispose();
   }
 });
+
+test('hover highlights glow like the others', () => {
+  const view = new BoardView(board, new THREE.Scene());
+  try {
+    view.setHighlights(new Map([[lower, 'hover'], [uncovered, 'hoverAligned']]));
+    view.animate(1);
+    assert.ok(view.tiles.get(lower).face.emissiveIntensity > 0);
+    assert.ok(view.tiles.get(uncovered).face.emissiveIntensity > view.tiles.get(lower).face.emissiveIntensity);
+  } finally {
+    view.dispose();
+  }
+});

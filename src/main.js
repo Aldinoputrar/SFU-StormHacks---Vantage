@@ -130,6 +130,7 @@ const viewDir = () => camera.position.clone().sub(controls.target).normalize().t
 let mode = 'intro';
 let labOpen = false;
 let summaryShown = false;
+let hover = null; // while exploring, the chain a click on the tile under the pointer would choose
 let current = chainsForView(board, viewDir()); // every line, as seen from the camera
 let selection = null; // { chain, cursor, clicked } while placing
 let lockedDir = null;
@@ -194,6 +195,9 @@ function refresh() {
   const highlights = new Map();
   for (const chain of current.chains.filter(isJoined)) {
     for (const key of chain.slots) highlights.set(key, 'aligned');
+  }
+  if (hover && mode === 'explore' && !busy()) {
+    for (const key of hover.slots) highlights.set(key, highlights.get(key) === 'aligned' ? 'hoverAligned' : 'hover');
   }
   if (selection) {
     for (const key of selection.chain.slots) highlights.set(key, 'selected');
@@ -292,6 +296,10 @@ function renderHud() {
     message,
   });
   document.getElementById('lab-open').disabled = !canLook();
+  // On the very first turn, point at the button that shows the trick.
+  document
+    .getElementById('iso')
+    .classList.toggle('nudge', !game.history.length && canLook() && !current.chains.some(isJoined));
 }
 
 // The compass: every view direction seen from above, the centre straight down
@@ -395,7 +403,14 @@ async function earnLetters(title) {
   const drawn = refillRack(game, score + 1);
   mode = isOver(game) ? 'over' : 'explore';
   controls.enabled = true;
-  setMessage(`New letters: ${drawn.join(' ')}`, 'success');
+  const first = !game.history.length;
+  setMessage(
+    first
+      ? `New letters: ${drawn.join(' ')}. Now press “Isometric view” at the top left.`
+      : `New letters: ${drawn.join(' ')}`,
+    'success',
+    first ? 12000 : 5000,
+  );
   refresh();
 }
 
@@ -630,7 +645,47 @@ function finish() {
 
 const raycaster = new THREE.Raycaster();
 const pointerDown = new THREE.Vector2();
-renderer.domElement.addEventListener('pointerdown', (event) => pointerDown.set(event.clientX, event.clientY));
+renderer.domElement.addEventListener('pointerdown', (event) => {
+  pointerDown.set(event.clientX, event.clientY);
+  setHover(null);
+});
+
+// While exploring, the line a click would choose lights up under the pointer.
+// The visible lines are worked out once per view, as a click does.
+let hoverPoint = null;
+let hoverQueued = false;
+let visibleCache = { key: '', view: null };
+function visibleLines() {
+  const dir = viewDir();
+  const key = dir.map((v) => v.toFixed(4)).join(',');
+  if (visibleCache.key !== key) visibleCache = { key, view: chainsForView(board, dir, undefined, true) };
+  return visibleCache.view;
+}
+function setHover(chain) {
+  if (chain === hover) return;
+  hover = chain;
+  renderer.domElement.style.cursor = chain ? 'pointer' : '';
+  refresh();
+}
+function updateHover() {
+  hoverQueued = false;
+  if (!hoverPoint || mode !== 'explore' || busy() || controls.state !== -1) return setHover(null);
+  raycaster.setFromCamera(hoverPoint, camera);
+  const key = view.pick(raycaster);
+  setHover(key ? (placementOptions(board, visibleLines(), key, viewDir())[0] ?? null) : null);
+}
+renderer.domElement.addEventListener('pointermove', (event) => {
+  if (event.buttons) return;
+  hoverPoint = new THREE.Vector2((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1);
+  if (!hoverQueued) {
+    hoverQueued = true;
+    requestAnimationFrame(updateHover);
+  }
+});
+renderer.domElement.addEventListener('pointerleave', () => {
+  hoverPoint = null;
+  setHover(null);
+});
 renderer.domElement.addEventListener('pointerup', (event) => {
   if (busy() || pointerDown.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 6) {
     return;
