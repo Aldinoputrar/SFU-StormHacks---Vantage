@@ -167,6 +167,45 @@ export function swingBridge(game) {
   return { board: next, turns };
 }
 
+// Online play passes the whole game from one device to the next at the end
+// of each turn. snapshot() is the game as plain data (no tiles in mid-air);
+// restore() makes a game match one, rebuilding the board if the swing bridge
+// has turned, and returns the board to draw.
+export function snapshot(game) {
+  return {
+    letters: [...game.letters],
+    bag: [...game.bag],
+    turnsLeft: game.turnsLeft,
+    finished: game.finished,
+    bridge: game.bridge,
+    history: game.history.map(({ type, word, points, player, slots, cyclic, onBridge }) => ({
+      type,
+      word,
+      points,
+      player,
+      slots,
+      cyclic,
+      onBridge,
+    })),
+  };
+}
+
+export function restore(game, data) {
+  cancelPending(game);
+  game.letters = new Map(data.letters);
+  game.bag = [...data.bag];
+  game.turnsLeft = data.turnsLeft;
+  game.finished = data.finished;
+  game.history = data.history.map((turn) => ({ ...turn }));
+  if (data.bridge !== game.bridge) {
+    const board = buildBoard({ ...game.level, bridgePosition: data.bridge });
+    game.bridge = data.bridge;
+    game.slots = new Set(board.slots.keys());
+    boards.set(game, board);
+  }
+  return boards.get(game);
+}
+
 export function finishRun(game) {
   cancelPending(game);
   game.finished = true;

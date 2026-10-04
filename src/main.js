@@ -20,6 +20,8 @@ import {
   placeTileBehind,
   preparePlay,
   refillRack,
+  restore,
+  snapshot,
   swapRack,
   swingBridge,
   undoTile,
@@ -29,7 +31,8 @@ import { createHud } from './hud.js';
 import { createLab } from './lab.js';
 import { saveScores, topScores } from './leaderboard.js';
 import { MAPS, MONUMENT, VIEWS } from './level.js';
-import { MISSION_POINTS, completeMissions } from './missions.js';
+import { MISSION_POINTS, completeMissions, pickMissions } from './missions.js';
+import { openRoom } from './online.js';
 import { MAX_PLAYERS, createPlayers, seat, standings, turnsFor } from './players.js';
 import { placementDirection, placementOptions } from './placement.js';
 import { BoardView } from './scene.js';
@@ -68,6 +71,14 @@ const game = createGame(LEVEL, board);
 // and missions of whoever's turn it is. Solo is one player.
 let players = createPlayers(['You'], LEVEL);
 let seated = seat(game, players, null, 0);
+// Online: { room, me }. Everyone plays on their own device, so the game
+// always holds this device's player (seat `me`), whoever's turn it is, and
+// `seated` says whose turn that is.
+let online = null;
+const myTurn = () => !online || seated === online.me;
+// The player whose rack, score and missions the game holds right now.
+const loaded = () => (online ? online.me : seated);
+const syncSeat = () => seat(game, players, loaded(), loaded());
 const confetti = createConfetti(document.getElementById('confetti'));
 const sound = createSound();
 const chamber = createChamber({ sound });
@@ -297,7 +308,12 @@ function renderHud() {
   } else {
     const joined = current.chains.filter(isJoined);
     const near = nearestVantage(board, viewDir());
-    if (joined.length) {
+    if (!myTurn()) {
+      headline = `${players[seated].name} is playing`;
+      hint = joined.length
+        ? 'A vantage point! Remember it for your turn.'
+        : 'Look around while you wait: drag to orbit, or click a dot on the compass.';
+    } else if (joined.length) {
       const loops = joined.filter((chain) => chain.cyclic).length;
       headline = `Vantage point! ${joined.length} line${joined.length > 1 ? 's' : ''} joined`;
       if (loops) headline += ' + an endless loop';
@@ -333,12 +349,12 @@ function renderHud() {
   hud.render({
     game,
     placing,
-    busy: busy(),
+    busy: busy() || !myTurn(),
     over: mode === 'over',
     canPlace: placing && Boolean(selection) && !busy(),
     canIso: canLook(),
     canReveal: canLook() && current.chains.some(isJoined),
-    canSwing: canLook() && mode === 'explore' && Boolean(board.bridgeCells.size),
+    canSwing: canLook() && mode === 'explore' && myTurn() && Boolean(board.bridgeCells.size),
     canSwitch,
     switchLabel,
     headline,
@@ -348,10 +364,10 @@ function renderHud() {
   });
   document.getElementById('lab-open').disabled = !canLook();
   document.getElementById('swing').hidden = !LEVEL.bridge;
-  const hints = players[seated].hints ?? HINTS;
+  const hints = players[loaded()].hints ?? HINTS;
   const hintButton = document.getElementById('hint-button');
   hintButton.textContent = `Hint (${hints})`;
-  hintButton.disabled = busy() || !hints || (mode !== 'explore' && mode !== 'placing');
+  hintButton.disabled = busy() || !myTurn() || !hints || (mode !== 'explore' && mode !== 'placing');
   const strip = document.getElementById('players');
   strip.hidden = players.length < 2;
   if (players.length > 1) renderStandings(strip);
@@ -539,6 +555,10 @@ function drawGhosts(chain) {
 // clicked tile, so the camera only snaps when a drag ends.
 function lockView(key) {
   if (mode !== 'explore' || busy()) return;
+  if (!myTurn()) {
+    setMessage(`It is ${players[seated].name}'s turn. You can look around while you wait.`, 'info');
+    return;
+  }
   mode = 'placing';
   controls.enabled = false;
   lockedDir = viewDir();
@@ -649,9 +669,9 @@ function showPending(chain) {
 // offline dictionary. It chooses the line and puts the cursor where the
 // word starts, so the player only has to type it. Three per player.
 async function hint() {
-  const player = players[seated];
+  const player = players[loaded()];
   player.hints ??= HINTS;
-  if (busy() || (mode !== 'explore' && mode !== 'placing') || !player.hints) return;
+  if (busy() || !myTurn() || (mode !== 'explore' && mode !== 'placing') || !player.hints) return;
   if (game.pending.length) {
     setMessage('Play or cancel your tiles first, then ask for a hint.', 'error');
     return;
@@ -765,7 +785,19 @@ async function play() {
   await new Promise((resolve) => setTimeout(resolve, Math.max(CELEBRATE_MS, walk * 1000 + 400)));
   celebrating = false;
   refresh();
-  if (mode !== 'over') await endTurn('Earn letters for your next word');
+  if (mode === 'over') shareState(lastWord(prepared, points));
+  else await endTurn('Earn letters for your next word', lastWord(prepared, points));
+}
+
+// What other devices need to celebrate a word played on this one.
+function lastWord(prepared, points) {
+  return {
+    slots: prepared.main.slots,
+    word: prepared.main.word,
+    total: points.total,
+    surfaces: points.surfaces,
+    player: players[loaded()].name,
+  };
 }
 
 // The word's tiles bounce in turn, flashing gold if it crossed the illusion;
@@ -815,7 +847,7 @@ function rewardMissions(finished) {
 
 function renderMissions(just = []) {
   document.getElementById('missions-title').textContent =
-    players.length > 1 ? `${players[seated].name}'s missions` : 'Missions';
+    online ? 'Your missions' : players.length > 1 ? `${players[seated].name}'s missions` : 'Missions';
   document.getElementById('mission-list').replaceChildren(
     ...game.missions.map((mission) => {
       const item = document.createElement('li');
@@ -832,7 +864,7 @@ renderMissions();
 // is rebuilt so its lines, joins and vantage points follow. Free, so players
 // can try both ways round.
 function swing() {
-  if (!canLook() || mode !== 'explore') return;
+  if (!canLook() || mode !== 'explore' || !myTurn()) return;
   const cells = board.bridgeCells;
   const result = swingBridge(game);
   if (!result) return;
@@ -873,6 +905,7 @@ function stepSwing(now) {
         : 'The bridge now points at the crown. Find the corner where they meet: try the bottom-right dot on the compass.',
     'success',
   );
+  shareState();
   refresh();
 }
 
@@ -887,7 +920,7 @@ function describePoints({ letters, wordMultiplier, surfaces, cross, bingo, bonus
 }
 
 async function swap() {
-  if (mode !== 'explore' || busy() || !swapRack(game)) return;
+  if (mode !== 'explore' || busy() || !myTurn() || !swapRack(game)) return;
   if (isOver(game)) {
     mode = 'over';
     refresh();
@@ -899,7 +932,16 @@ async function swap() {
 // After a word or a swap: with more than one player, the next one takes the
 // seat and the screen is passed to them; then whoever is seated tops up
 // their letters in the chamber.
-async function endTurn(title) {
+async function endTurn(title, last = null) {
+  if (online) {
+    // Online: pass the turn on, send the game to everyone, and wait.
+    syncSeat();
+    seated = nextSeat(seated);
+    shareState(last);
+    if (seated === online.me) await earnLetters(title);
+    else refresh();
+    return;
+  }
   if (players.length > 1) {
     seated = seat(game, players, seated, (seated + 1) % players.length);
     renderMissions();
@@ -934,9 +976,72 @@ function handoff(player) {
   });
 }
 
+// The next player still in the game after seat `from`.
+function nextSeat(from) {
+  for (let step = 1; step <= players.length; step++) {
+    const next = (from + step) % players.length;
+    if (!players[next].gone) return next;
+  }
+  return from;
+}
+
+// Online: sends the whole game to every other device. `last` describes a
+// word just played, so they can celebrate it too.
+function shareState(last = null) {
+  if (!online) return;
+  syncSeat();
+  online.room.sendState({
+    game: snapshot(game),
+    players: players.map(({ name, rack, score, missions, hints, gone }) => ({ name, rack, score, missions, hints, gone })),
+    seated,
+    last,
+    over: mode === 'over' || isOver(game),
+  });
+}
+
+// Online: another device played. Make this one match, show what happened,
+// and take the turn if it is now ours.
+function applyState(data) {
+  const before = board;
+  board = restore(game, data.game);
+  players = data.players.map((player) => ({ ...player }));
+  seated = data.seated;
+  seat(game, players, null, online.me);
+  if (board !== before) {
+    view.dispose();
+    view = new BoardView(board, scene, game.bonuses);
+    visibleCache = { key: '', view: null };
+  }
+  for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed');
+  traveller.standOn(board.slots.get(traveller.slot?.key) ?? startSlot());
+  renderMissions();
+  if (data.last) {
+    const { slots, total, surfaces, word, player } = data.last;
+    view.celebrate(slots, surfaces > 1);
+    sound.word(total);
+    traveller.walkAlong(slots.map((key) => board.slots.get(key)).filter(Boolean));
+    showPopup(`+${total}`, [`${player} played ${word}`], total >= 40);
+  }
+  if (data.over || isOver(game)) {
+    mode = 'over';
+    refresh();
+    return;
+  }
+  mode = 'explore';
+  controls.enabled = true;
+  if (seated === online.me) {
+    setMessage('Your turn!', 'success');
+    refresh();
+    // Let the last word's celebration play before the chamber opens.
+    setTimeout(() => mode === 'explore' && earnLetters('Your turn: earn your letters'), data.last ? 2200 : 600);
+  } else {
+    refresh();
+  }
+}
+
 // Every player's score, best first, with the one in the seat marked.
 function renderStandings(list, { final = false } = {}) {
-  seat(game, players, seated, seated); // bring the seated player's score up to date
+  syncSeat(); // bring the loaded player's score up to date
   const ranked = standings(players);
   list.replaceChildren(
     ...ranked.map((player) => {
@@ -955,11 +1060,12 @@ function renderStandings(list, { final = false } = {}) {
 }
 
 function finish() {
-  if (busy() || mode === 'over') return;
+  if (busy() || mode === 'over' || !myTurn()) return;
   exitPlacing();
   finishRun(game);
   mode = 'over';
   controls.enabled = true;
+  shareState();
   refresh();
 }
 
@@ -1062,7 +1168,7 @@ function showSummary() {
   const played = game.history.filter((turn) => turn.type === 'word');
   const best = played.reduce((top, turn) => (turn.points.total > (top?.points.total ?? -1) ? turn : top), null);
   const joined = played.filter((turn) => turn.points.surfaces > 1).length;
-  seat(game, players, seated, seated); // bring the seated player's score up to date
+  syncSeat(); // bring the loaded player's score up to date
   const ranked = standings(players);
   const multi = players.length > 1;
   const winners = ranked.filter(({ place }) => place === 1);
@@ -1075,8 +1181,9 @@ function showSummary() {
   const standingsList = document.getElementById('summary-standings');
   standingsList.hidden = !multi;
   if (multi) renderStandings(standingsList, { final: true });
+  // Online, each device records its own player; on one screen, everyone.
   const fresh = saveScores(
-    players.map(({ name, score }) => ({
+    players.filter((player, i) => !online || i === online.me).map(({ name, score }) => ({
       name,
       score,
       map: LEVEL.id,
@@ -1248,6 +1355,130 @@ function renderScores(list, fresh = []) {
 }
 renderScores(document.getElementById('intro-scores'));
 
+// Online rooms: create one, or join with a code, from the title screen. The
+// lobby lists who is in; the host starts the game for everyone.
+const onlineStatus = document.getElementById('online-status');
+const myName = () => (setup.names[0] ?? '').trim() || 'Player';
+let lobbyNames = [];
+
+function showLobby(names) {
+  lobbyNames = names;
+  const { room } = online;
+  document.getElementById('online-setup').hidden = true;
+  document.getElementById('lobby').hidden = false;
+  document.getElementById('lobby-code').textContent = room.code;
+  document.getElementById('lobby-start').hidden = !room.host;
+  document.getElementById('lobby-wait').hidden = room.host;
+  document.getElementById('intro-play').hidden = true;
+  document.getElementById('player-count').hidden = true;
+  onlineStatus.textContent = room.host ? 'Share the code. Start when everyone is in (up to four).' : '';
+  document.getElementById('lobby-players').replaceChildren(
+    ...names.map((name, i) => {
+      const item = document.createElement('li');
+      item.textContent = i === 0 ? `${name} (host)` : name;
+      return item;
+    }),
+  );
+}
+
+const roomHandlers = {
+  lobby(names, map) {
+    // The host chose another map: reload onto it and join again.
+    if (map && map !== LEVEL.id) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('map', map);
+      url.searchParams.set('join', online.room.code);
+      window.location.assign(url);
+      return;
+    }
+    showLobby(names);
+  },
+  start: beginOnline,
+  state: applyState,
+  left(seatIndex) {
+    const gone = players[seatIndex];
+    if (!gone) return;
+    gone.gone = true;
+    setMessage(`${gone.name} left the game.`, 'info', 8000);
+    // The host passes the turn on if it was theirs.
+    if (online.room.host && seated === seatIndex && mode !== 'over') {
+      seated = nextSeat(seatIndex);
+      shareState();
+      if (seated === online.me) earnLetters('Your turn: earn your letters');
+    }
+    refresh();
+  },
+  error(text) {
+    onlineStatus.textContent = text;
+    if (mode !== 'intro') setMessage(text, 'error', 0);
+  },
+};
+
+async function enterRoom(code = null) {
+  if (online) return;
+  sound.unlock();
+  onlineStatus.textContent = code ? 'Joining the room…' : 'Opening a room…';
+  try {
+    const room = await openRoom({ code, name: myName(), map: LEVEL.id, on: roomHandlers });
+    online = { room, me: 0 };
+    if (room.host) showLobby([myName()]);
+    else onlineStatus.textContent = `Joining room ${room.code}…`;
+  } catch (error) {
+    onlineStatus.textContent = error.message;
+  }
+}
+document.getElementById('room-create').addEventListener('click', () => enterRoom());
+document.getElementById('room-join').addEventListener('click', () => {
+  const code = document.getElementById('room-code').value.trim();
+  if (code.length === 4) enterRoom(code);
+  else onlineStatus.textContent = 'Type the four-letter room code first.';
+});
+document.getElementById('lobby-copy').addEventListener('click', async () => {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('map', LEVEL.id);
+  url.searchParams.set('join', online.room.code);
+  try {
+    await navigator.clipboard.writeText(url.toString());
+    onlineStatus.textContent = 'Invite link copied.';
+  } catch {
+    onlineStatus.textContent = url.toString();
+  }
+});
+document.getElementById('lobby-start').addEventListener('click', () => {
+  online.room.start({ names: lobbyNames, missions: pickMissions(Math.random, LEVEL), map: LEVEL.id });
+});
+
+// The game begins on every device at once: the same players and missions,
+// and this device's own seat.
+function beginOnline(config, seatIndex) {
+  players = config.names.map((name) => ({
+    name,
+    rack: [],
+    score: 0,
+    missions: config.missions.map((mission) => ({ ...mission })),
+  }));
+  online.me = seatIndex;
+  seated = 0;
+  seat(game, players, null, online.me);
+  game.turnsLeft = turnsFor(LEVEL, players.length);
+  renderMissions();
+  document.getElementById('intro').hidden = true;
+  document.body.classList.remove('intro');
+  mode = 'explore';
+  animateTo(OVERHEAD, () => {
+    if (myTurn()) earnLetters('You go first: earn your letters');
+    else setMessage(`${players[0].name} goes first.`, 'info', 8000);
+  });
+}
+
+// An invite link (?join=CODE) joins straight away.
+const invited = new URLSearchParams(window.location.search).get('join');
+if (invited) {
+  document.getElementById('room-code').value = invited;
+  enterRoom(invited);
+}
+
 document.getElementById('intro-play').addEventListener('click', () => {
   sound.unlock();
   players = createPlayers(Array.from({ length: setup.count }, (_, i) => setup.names[i] ?? ''), LEVEL);
@@ -1307,6 +1538,7 @@ if (import.meta.env.DEV) {
       return { x: ((point.x + 1) / 2) * window.innerWidth, y: ((1 - point.y) / 2) * window.innerHeight };
     },
     mode: () => mode,
+    online: () => online && { code: online.room.code, me: online.me, seated, players: players.map(({ name, score }) => `${name}:${score}`) },
     lookFrom: (dir) => animateTo(dir),
   };
 }

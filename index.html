@@ -101,6 +101,20 @@
               <button type="button" data-count="4" aria-pressed="false">4</button>
             </div>
             <div id="player-names"></div>
+            <h3>Online</h3>
+            <div id="online-setup">
+              <button id="room-create" type="button">Create a room</button>
+              <span>or</span>
+              <input id="room-code" type="text" maxlength="4" placeholder="CODE" aria-label="Room code" autocomplete="off" />
+              <button id="room-join" type="button">Join</button>
+            </div>
+            <div id="lobby" hidden>
+              <p class="lobby-code">Room <strong id="lobby-code"></strong> <button id="lobby-copy" type="button" class="link">Copy invite link</button></p>
+              <ol id="lobby-players" class="standings"></ol>
+              <button id="lobby-start" type="button" class="primary" hidden>Start the game</button>
+              <p id="lobby-wait" class="blurb" hidden>Waiting for the host to start…</p>
+            </div>
+            <p id="online-status" class="blurb" aria-live="polite"></p>
             <h3>Best on this map</h3>
             <ol id="intro-scores" class="scores"></ol>
           </div>

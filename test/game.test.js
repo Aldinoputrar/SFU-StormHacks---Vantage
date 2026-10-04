@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildBoard, chainsForView, slotKey } from '../src/board.js';
-import { createGame, letterAt, placeTile, placeTileBehind, playWord, refillRack, swapRack, undoTile } from '../src/game.js';
+import {
+  createGame,
+  letterAt,
+  placeTile,
+  placeTileBehind,
+  playWord,
+  refillRack,
+  restore,
+  snapshot,
+  swapRack,
+  swingBridge,
+  undoTile,
+} from '../src/game.js';
+import { PLAZA } from '../src/level.js';
 
 const strip = {
   seed: 1,
@@ -144,4 +157,33 @@ test('tiles do not slide back over a letter, or when they are not side by side',
   assert.equal(placeTileBehind(game, slots, 0), false, 'the A is in the way');
   placeTile(game, slots[4], 0);
   assert.equal(placeTileBehind(game, slots, 0), false, 'the tiles are apart');
+});
+
+test('a game restored from a snapshot on another device plays on identically', () => {
+  // Two devices start the same seeded game.
+  const mine = createGame(PLAZA, buildBoard(PLAZA));
+  const theirs = createGame(PLAZA, buildBoard(PLAZA));
+  refillRack(mine);
+
+  // On mine: swing the bridge and play TABLE across the gap.
+  swingBridge(mine);
+  const home = [1, 1, 1].map((v) => v / Math.sqrt(3));
+  const board = restore(mine, snapshot(mine)); // restoring your own snapshot changes nothing
+  const chain = chainsForView(board, home).chains.find((c) => c.slots.includes(slotKey([6, 1, 2], '+y')) && c.slots.length === 11);
+  mine.rack[0] = 'T';
+  assert.ok(placeTile(mine, chain.slots[6], 0));
+  assert.equal(playWord(mine, chain, home, () => true).word, 'TABLE');
+
+  // Send it across, as JSON, and restore it on theirs.
+  const sent = JSON.parse(JSON.stringify(snapshot(mine)));
+  const theirBoard = restore(theirs, sent);
+  assert.deepEqual([...theirs.letters].sort(), [...mine.letters].sort());
+  assert.deepEqual(theirs.bag, mine.bag);
+  assert.equal(theirs.turnsLeft, mine.turnsLeft);
+  assert.equal(theirs.bridge, 1);
+  assert.ok(theirBoard.bridgeCells.has('-6,5,1'), 'their board has the bridge in its swung position');
+  assert.equal(theirs.history.at(-1).word, 'TABLE');
+  assert.equal(theirs.history.at(-1).points.total, mine.history.at(-1).points.total);
+  // Bonus squares come from the seed, so both devices already agree on them.
+  assert.deepEqual([...theirs.bonuses].sort(), [...mine.bonuses].sort());
 });

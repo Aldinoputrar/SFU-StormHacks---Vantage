@@ -120,6 +120,8 @@ Every word gets a moment: its tiles bounce in turn, flashing gold when it crosse
 
 **Pass-and-play.** Up to four players share one board on one screen, six turns each. Each keeps their own letters, score and missions; between turns a card asks the next player to take the screen, so letters stay hidden ([`src/players.js`](src/players.js)).
 
+**Online rooms.** *Create a room* on the title screen gives a four-letter code (and an invite link); up to three friends join it from their own devices. There is no game server: the browsers connect to each other directly over WebRTC, through PeerJS, whose public broker only introduces them. Each player takes their turn on their own screen, chamber and all, while the others watch the board and can look around; when a turn ends, the whole game is sent as a snapshot and every other device restores it, so nothing is ever simulated in two places ([`src/online.js`](src/online.js)). The room logic is tested with fake connections, and the snapshot by replaying a turn onto a second game.
+
 **Leaderboard.** The best scores on each map are kept in this browser and shown on the title screen and at the end of every run ([`src/leaderboard.js`](src/leaderboard.js)).
 
 **Hints.** The **Hint** button, three per player per run, finds the best word you can make from the current view with the letters you hold. It tries candidates against the real rules, cross-words included, picks the line for you and puts the cursor where the word starts, so you only have to type it ([`src/hint.js`](src/hint.js)).
@@ -189,6 +191,7 @@ The structure takes inspiration from Penrose stairs, Escher's Waterfall and Monu
 ## Stack
 
 - [Three.js](https://threejs.org/) for 3D graphics and the chamber's shader
+- [PeerJS](https://peerjs.com/) for online rooms, peer to peer over WebRTC
 - The Web Audio API for every sound: soft bells on a pentatonic scale, synthesised in [`src/audio.js`](src/audio.js), so there are no audio files
 - Vite for development, builds and the dictionary proxy
 - Node's built-in test runner
@@ -244,6 +247,7 @@ npm run build     # production build in dist/
 | [`src/missions.js`](src/missions.js) | The three goals of each run |
 | [`src/traveller.js`](src/traveller.js) | The little figure who walks every word |
 | [`src/players.js`](src/players.js) | Pass-and-play: seats, turns and standings |
+| [`src/online.js`](src/online.js) | Online rooms: peer-to-peer hosting, joining and relaying turns |
 | [`src/leaderboard.js`](src/leaderboard.js) | Best scores, kept in the browser |
 | [`src/confetti.js`](src/confetti.js) | Confetti for big moments |
 | [`src/scene.js`](src/scene.js) | Drawing the monument and its tiles |
@@ -276,4 +280,5 @@ npm run build     # production build in dist/
 - [x] A traveller who walks every word
 - [x] Pass-and-play for up to four
 - [x] A local leaderboard
+- [x] Online rooms for up to four, peer to peer
 - [ ] An online leaderboard

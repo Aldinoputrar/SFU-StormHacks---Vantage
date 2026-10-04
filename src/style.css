@@ -1354,3 +1354,52 @@ body.intro #players {
     display: none;
   }
 }
+
+/* Online rooms on the title screen. */
+#online-setup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#room-code {
+  width: 64px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.lobby-code {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.lobby-code strong {
+  font-size: 20px;
+  letter-spacing: 0.18em;
+  margin: 0 6px 0 4px;
+}
+
+#lobby-players {
+  margin-bottom: 8px;
+}
+
+#lobby-start {
+  width: 100%;
+  font-size: 15px;
+  padding: 8px;
+}
+
+#online-status:empty {
+  display: none;
+}
