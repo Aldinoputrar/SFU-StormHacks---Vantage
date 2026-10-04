@@ -20,6 +20,16 @@ An orthographic camera lets surfaces at different depths appear to touch without
 
 Every face of every block can hold letters: tops, sides and undersides. Each face is a small Scrabble board, and a word can run along one strip and carry on along another. Words read left to right (or top to bottom) as they appear from where you stand.
 
+## Three maps
+
+Choose a map on the title screen. Each has the same rules and its own tricks:
+
+- **The Monument:** a plaza, a tower, four floating arms, the endless crown and the swing bridge. Hooks …ABLE, …RISE, …STAR, …TION.
+- **The Spire:** a thin tower with ledges at four heights and the crown on top. Hooks …IGHT, …OUND, …LESS, …NESS.
+- **The Courtyard:** a wide 7 × 7 plaza, the most room for ordinary Scrabble, with eight floating arms, two from each corner. From one corner an arm reads outward and ends a word (…ATE, …ING, …LESS, …OUND); from the other it reads inward and starts one (OVER…, FORE…, BACK…, DOWN…).
+
+The tests check that every map joins lines from all four corners and that every hook reads the right way round.
+
 ## The monument
 
 One connected monument: a sand plaza (a 5×5 Scrabble board on top), a lavender tower in the middle, a coral Penrose crown resting on the tower, and four mint arms in a pinwheel.
@@ -27,6 +37,7 @@ One connected monument: a sand plaza (a 5×5 Scrabble board on top), a lavender 
 - **Four views, like Monument Valley's rotations.** Vantage points are the four isometric views from above. Each arm's far end is shifted one step along one of those view directions, so each arm only joins the plaza, and its words only connect, from one corner. From anywhere else it is a broken bridge.
 - **Hook words.** Lines read from the plaza out along each arm, and only the far ends hold letters: …ABLE (LOVEABLE, TABLE), …RISE (SUNRISE), …STAR (LODESTAR), …TION (MOTION). The start of each line is left empty, because a word already complete across the gap could never be extended.
 - **The Penrose crown.** Four strips around a square, each lifted a different amount along the home view (1, 1, 1). From that view the lifts vanish and the strips close into one ring of 12 tiles with no start and no end, so a word can run round a corner and past any point. Orbit away and it opens into a staircase that climbs at three corners yet returns to where it started. One side rests on the tower, so the crown is part of the monument.
+- **The swing bridge.** A blue bridge floats beside the tower. **Swing the bridge** turns it a quarter turn about its first block, for free, carrying any letters on it. In one position, seen from the home view, it runs straight into the crown and its O (TRI-O, ECH-O); in the other, seen from the opposite corner, it runs into TION from a new side (MO-TION). The board is rebuilt after each swing, so its joins and vantage points follow. The spot was found by searching every floating position for one whose two positions each join a different line.
 - **Reveal the trick** swings the camera away from a vantage point and back, with dashed bars across every hidden gap.
 - **The compass** (bottom right) maps every view direction from above: the centre is straight down, the ring is the horizon, the four dots are the vantage points and the orange dot is you. Click a dot to fly there.
 
@@ -34,20 +45,37 @@ One connected monument: a sand plaza (a 5×5 Scrabble board on top), a lavender 
 
 Before each turn you earn letters in a short minigame (about 30 seconds) set in the Poincaré disk, a model of the infinite hyperbolic plane drawn inside a circle.
 
-Each visit has three rounds of two kinds.
+Each visit has two rounds: an **action game** worth up to two stars, then a **quiz** worth one, so a perfect visit earns three. The first visit is always the crystal dash and then the closest-crystal quiz; later visits pick a different action game each time and any quiz.
 
-**Closest crystal** (rounds 1 and 3):
+### Action games
+
+All four run on the same hyperbolic floor ([`src/arcade.js`](src/arcade.js)), and the tests play each one to check it can be won and lost ([`test/arcade.test.js`](test/arcade.test.js)).
+
+- **Crystal dash.** Twenty seconds to walk about (W A S D, or hold the floor) and grab as many crystals as you can. Those near the rim look close and aren't. 8 crystals for two stars, 4 for one.
+- **Escape the swarm.** Shadows close in, a little slower than you, for twenty seconds; three hearts. Hyperbolic space opens up so fast that a few steps sideways leave a chaser far behind.
+- **Geodesic golf.** Drag back from the ball and let go to putt. The ball rolls along a true straight line, which bows towards the centre on screen; an orange guide shows how its roll begins. In one for two stars, in three for one. In the tests, aiming straight at the hole on screen misses every time; aiming along the geodesic sinks it.
+- **Bounce shot.** A barrier blocks the way to the target. The shot follows geodesics and bounces off the round arena wall and the barrier, angle in equalling angle out; a guide line shows the true path, bounces and all.
+
+Moving things step along geodesics: slide the point to the centre, step along the diameter, slide back, and turn the heading by the argument of that map's derivative (`geodesicStep`). A bounce mirrors the heading in the wall's tangent where it hits (`bounce`).
+
+### Quizzes
+
+**Closest crystal:**
 
 - You stand off-centre with three crystals that look about equally far away (within ±8% on screen) and about equally big. Pick the one that is **truly** closest.
 - The crystals differ in true size so that they *look* the same size. With equal true sizes the biggest-looking crystal would always be the answer (it sits where space is least stretched), and a round could be won without reading the floor; now it is the answer only about a third of the time.
 - The floor is a tiling of triangles, eight at each corner. Every triangle is the same size in hyperbolic terms, so they shrink towards the rim, and counting tiles is a fair way to judge distance. The crystal that looks nearest is never the answer: space near the rim is much bigger than it looks.
 - After you choose, dashed geodesics (the hyperbolic "straight lines") show each true distance, one dash per half unit, and you walk to the closest crystal while the world flows past and the others sink towards the rim.
 
-**Find the straight line** (round 2):
+**Find the straight line:**
 
 - Three paths lead to a gold crystal: the true geodesic, the Euclidean straight segment, and an arc bent the wrong way or too far. Pick the one that is truly straight, the shortest way there.
 - The segment looks straightest but is longer. In the Poincaré disk geodesics are arcs that would meet the rim at right angles, so they bow towards the centre, where space is least stretched. After you choose, each path is labelled with its true length and you walk the geodesic to the crystal.
 - The round starts with the world sliding you out towards the rim, where geodesics bow enough to see.
+
+**Biggest triangle:** three geodesic triangles look about the same size; the one nearest the rim truly holds far more. After you choose, each is labelled with its area, and the answer's angle sum shows where the area went.
+
+**Where will you end up?** You will walk a square: equal sides, right-angle turns. Pick where you land. One choice is back where you started, the flat-world answer, which is never right; then you walk it for real, leaving a trail.
 
 **Scoring and the lesson:**
 
@@ -82,6 +110,16 @@ Controls: <kbd>W A S D</kbd> or arrow keys to walk, hold the floor to walk towar
 2. **Find a vantage point.** Orbit the monument; release near one of the four isometric views and the camera snaps to it. Lines that join from there glow.
 3. **Play a word.** Click a tile to lock the view and choose the line through it, then type or tap letters. A word must use at least one letter already on the board, and every word it makes sideways on the same face must be valid too.
 4. **Check and score.** Words are checked with Merriam-Webster's Scrabble dictionary, then scored, and you return to the chamber for new letters.
+
+**Missions.** Each run deals three goals, always including *cross the gap* and two more, such as writing on the endless loop, playing on the swung bridge, landing a word bonus, or winning every chamber round. Each one finished is worth 15 points ([`src/missions.js`](src/missions.js)).
+
+Every word gets a moment: its tiles bounce in turn, flashing gold when it crossed the illusion, the score rises over the monument and counts up in the corner, and big words and missions throw confetti.
+
+**The traveller.** A little figure waits on the plaza. Whenever a word is played, they walk along it tile by tile, on walls and undersides too, always upright to the face beneath them. Crossing the gap between two joined strips they move in a straight line through 3D space; the gap is parallel to the view, so on screen it looks like an ordinary step ([`src/traveller.js`](src/traveller.js)).
+
+**Pass-and-play.** Up to four players share one board on one screen, six turns each. Each keeps their own letters, score and missions; between turns a card asks the next player to take the screen, so letters stay hidden ([`src/players.js`](src/players.js)).
+
+**Leaderboard.** The best scores on each map are kept in this browser and shown on the title screen and at the end of every run ([`src/leaderboard.js`](src/leaderboard.js)).
 
 Instead of a word you can **Swap** (send your rack back and earn new letters; uses a turn). The run ends when you use your last turn, click **Finish**, or run out of tiles.
 
@@ -162,8 +200,10 @@ Open the printed local URL and press **Play**. You start in the Hyperbolic Chamb
 
 To check words with Merriam-Webster, the server must be able to reach `scrabble.merriam.com`. If it can't (offline, or a network that blocks the site), the game still works with the offline list.
 
+For demos, the address can choose what to show: `?map=spire` or `?map=courtyard` for another map, `?game=golf` (or `dash`, `swarm`, `bounce`) and `?quiz=square` (or `closest`, `straight`, `triangle`) for the chamber's rounds, and `?skip` to offer skipping the chamber from the first visit.
+
 ```bash
-npm test          # alignment, rules, dictionary and hyperbolic maths
+npm test          # alignment, rules, dictionary, hyperbolic maths and the action games
 npm run vantages  # list the vantage points in the level
 npm run build     # production build in dist/
 ```
@@ -194,6 +234,12 @@ npm run build     # production build in dist/
 | [`src/chamber.js`](src/chamber.js) | The Hyperbolic Chamber screen |
 | [`src/lab.js`](src/lab.js) | The Hyperbolic Lab: free walking, triangles, the square walk and holonomy, in three geometries |
 | [`src/audio.js`](src/audio.js) | Synthesised sound |
+| [`src/arcade.js`](src/arcade.js) | The chamber's action games: dash, swarm, golf and bounce |
+| [`src/missions.js`](src/missions.js) | The three goals of each run |
+| [`src/traveller.js`](src/traveller.js) | The little figure who walks every word |
+| [`src/players.js`](src/players.js) | Pass-and-play: seats, turns and standings |
+| [`src/leaderboard.js`](src/leaderboard.js) | Best scores, kept in the browser |
+| [`src/confetti.js`](src/confetti.js) | Confetti for big moments |
 | [`src/scene.js`](src/scene.js) | Drawing the monument and its tiles |
 | [`src/placement.js`](src/placement.js) | Which line a click picks first, and its direction on screen (Across, Down, Diagonal) |
 | [`src/hud.js`](src/hud.js), [`src/style.css`](src/style.css), [`index.html`](index.html) | The interface |
@@ -215,5 +261,12 @@ npm run build     # production build in dist/
 - [x] Hyperbolic Lab: free walking, triangles and holonomy
 - [x] Flat and spherical geometry in the lab, for comparison
 - [x] A straight-line round in the chamber
+- [x] A swing bridge that changes which lines join
+- [x] Missions, and celebrations for every word
 - [x] Compass of vantage points
-- [ ] Leaderboard
+- [x] Three maps
+- [x] Four action games and four quizzes in the chamber
+- [x] A traveller who walks every word
+- [x] Pass-and-play for up to four
+- [x] A local leaderboard
+- [ ] An online leaderboard

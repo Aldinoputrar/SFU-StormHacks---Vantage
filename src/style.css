@@ -896,7 +896,8 @@ body.intro #title,
 body.intro #stats,
 body.intro #status,
 body.intro #tray,
-body.intro #compass {
+body.intro #compass,
+body.intro #missions {
   visibility: hidden;
 }
 
@@ -939,4 +940,417 @@ button.nudge {
 
 @media (prefers-reduced-motion: reduce) {
   button.nudge { animation: none; box-shadow: 0 0 0 3px rgba(255, 138, 0, 0.5); }
+}
+
+/* The swing bridge's button wears the bridge's blue. */
+#swing {
+  border-color: #4f8fc0;
+  color: #2a6a9e;
+}
+
+/* Missions: three goals for the run, under the view buttons. */
+#missions {
+  position: fixed;
+  left: 16px;
+  top: 128px;
+  width: 230px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 12px;
+}
+
+#missions h2 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+#mission-list,
+#summary-missions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+
+#mission-list li,
+#summary-missions li {
+  position: relative;
+  padding-left: 22px;
+  line-height: 1.35;
+}
+
+#mission-list li::before,
+#summary-missions li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--muted);
+  border-radius: 4px;
+}
+
+#mission-list li.done,
+#summary-missions li.done {
+  color: var(--success);
+}
+
+#mission-list li.done::before,
+#summary-missions li.done::before {
+  content: '✓';
+  border-color: var(--success);
+  background: var(--success);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+
+#mission-list li.just {
+  animation: mission-done 0.9s ease-out;
+}
+
+@keyframes mission-done {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.08); background: var(--pending); }
+  100% { transform: scale(1); }
+}
+
+#summary-missions {
+  margin: 0 auto 14px;
+  max-width: 340px;
+  text-align: left;
+  font-size: 13px;
+}
+
+/* The score for a word, rising and fading over the monument. */
+#popup {
+  position: fixed;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#popup .pop {
+  animation: pop-rise 1.8s ease-out forwards;
+}
+
+#popup .points {
+  display: block;
+  font-size: 56px;
+  font-weight: 800;
+  color: var(--ink);
+  text-shadow: 0 2px 0 #ffffff, 0 6px 18px rgba(74, 63, 87, 0.25);
+}
+
+#popup .points.big {
+  color: var(--accent);
+}
+
+#popup .detail {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--aligned);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+#popup .detail.mission {
+  background: var(--success);
+}
+
+@keyframes pop-rise {
+  0% { opacity: 0; transform: translateY(20px) scale(0.6); }
+  15% { opacity: 1; transform: translateY(0) scale(1.08); }
+  25% { transform: scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-50px); }
+}
+
+#confetti {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 20;
+}
+
+#score.bump {
+  animation: score-bump 0.5s ease-out;
+}
+
+@keyframes score-bump {
+  40% { transform: scale(1.3); color: var(--accent); }
+}
+
+@media (max-width: 1300px) {
+  #missions {
+    top: auto;
+    bottom: 140px;
+    width: 200px;
+  }
+}
+
+@media (max-width: 720px) {
+  #missions {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #popup .pop,
+  #mission-list li.just,
+  #score.bump {
+    animation-duration: 0.01s;
+  }
+}
+
+/* Title screen: how to play beside the choices of map and players. */
+.intro-card {
+  width: min(860px, 100%);
+}
+
+.intro-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.intro-grid .intro-steps {
+  margin: 0;
+}
+
+.intro-setup h3,
+.summary-heading {
+  margin: 0 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.intro-setup h3:not(:first-child) {
+  margin-top: 14px;
+}
+
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.choice button {
+  flex: 1;
+  min-width: 0;
+  background: #ffffff;
+  border-color: var(--line);
+}
+
+.choice button[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
+
+.blurb {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+#player-names {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+#player-names input {
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+#player-names input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.scores {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+  font-size: 13px;
+}
+
+.scores li {
+  display: flex;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f6eef3;
+}
+
+.scores li .place {
+  width: 1.4em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.scores li .name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scores li .score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.scores li.new {
+  background: var(--pending);
+  font-weight: 700;
+}
+
+.scores li.empty {
+  color: var(--muted);
+  background: none;
+  padding-left: 0;
+}
+
+/* Who is playing: the scores of every player, the one in the seat marked. */
+.standings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.standings li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 13px;
+}
+
+.standings li.active {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+  font-weight: 700;
+}
+
+.standings li.winner {
+  background: var(--pending);
+  font-weight: 700;
+}
+
+.standings .score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+#players {
+  position: fixed;
+  top: 92px;
+  right: 16px;
+  width: 190px;
+}
+
+#summary-standings {
+  max-width: 320px;
+  margin: 0 auto 14px;
+}
+
+#summary-scores {
+  max-width: 320px;
+  margin: 0 auto 16px;
+  text-align: left;
+}
+
+#handoff {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(74, 63, 87, 0.45);
+  backdrop-filter: blur(6px);
+  z-index: 12;
+}
+
+#handoff h2 {
+  margin: 0 0 6px;
+  font-size: 30px;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.handoff-label {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.handoff-hint {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#handoff-scores {
+  max-width: 280px;
+  margin: 0 auto 16px;
+}
+
+#handoff-ready {
+  font-size: 15px;
+  padding: 9px 22px;
+}
+
+body.intro #players {
+  visibility: hidden;
+}
+
+@media (max-width: 760px) {
+  .intro-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #players {
+    display: none;
+  }
 }

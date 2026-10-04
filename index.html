@@ -15,6 +15,7 @@
         <button id="overhead" type="button">Overhead view</button>
         <button id="iso" type="button">Isometric view</button>
         <button id="reveal" type="button" disabled>Reveal the trick</button>
+        <button id="swing" type="button" title="Turn the blue bridge a quarter turn (free)">Swing the bridge</button>
         <button id="lab-open" type="button" title="Walk freely in hyperbolic, flat and spherical space">Hyperbolic Lab</button>
       </div>
     </header>
@@ -25,6 +26,7 @@
       <div><dt>Bag</dt><dd id="bag"></dd></div>
       <button id="mute" type="button" aria-pressed="false" title="Sound on or off">Sound on</button>
     </dl>
+    <ol id="players" class="standings" hidden aria-label="Players"></ol>
 
     <section id="status" aria-live="polite">
       <strong id="headline"></strong>
@@ -33,6 +35,14 @@
       <span id="hint"></span>
       <span id="message"></span>
     </section>
+
+    <section id="missions" aria-label="Missions">
+      <h2 id="missions-title">Missions</h2>
+      <ol id="mission-list"></ol>
+    </section>
+
+    <div id="popup" aria-live="polite"></div>
+    <canvas id="confetti" aria-hidden="true"></canvas>
 
     <div id="compass" aria-hidden="true">
       <svg viewBox="-50 -50 100 100">
@@ -60,26 +70,55 @@
       <div class="intro-card">
         <h2 id="intro-title">Vantage</h2>
         <p class="tagline">Scrabble on an impossible monument</p>
-        <ol class="intro-steps">
-          <li>
-            <strong>Earn letters with a small puzzle.</strong>
-            Three balls sit on a squished floor. Click the one that is really closest: count the floor triangles, not the pixels. Better answers give better letters.
-          </li>
-          <li>
-            <strong>Press Isometric view.</strong>
-            Some rows of tiles are far apart in 3D, but from one special angle they look like a single line, like a Monument Valley level.
-          </li>
-          <li>
-            <strong>Click a glowing tile and type a word.</strong>
-            Start on the plaza and let the word run across the gap into ABLE: type T and you have TABLE.
-            Words that cross the gap score double.
-          </li>
-        </ol>
+        <div class="intro-grid">
+          <ol class="intro-steps">
+            <li>
+              <strong>Earn letters in curved space.</strong>
+              Play a quick game on a floor that looks squished near the rim: grab crystals, putt along curved
+              lines, dodge shadows, then solve one puzzle. More stars, better letters.
+            </li>
+            <li>
+              <strong>Press Isometric view.</strong>
+              Some rows of tiles are far apart in 3D, but from one special angle they look like a single line, like a
+              Monument Valley level.
+            </li>
+            <li>
+              <strong>Click a glowing tile and type a word.</strong>
+              Start on the plaza and let the word run across the gap into the letters on a floating arm. Words that
+              cross the gap score double, and the traveller walks them.
+            </li>
+          </ol>
+          <div class="intro-setup">
+            <h3>Map</h3>
+            <div id="map-choice" class="choice" role="group" aria-label="Map"></div>
+            <p id="map-blurb" class="blurb"></p>
+            <h3>Players</h3>
+            <div id="player-count" class="choice" role="group" aria-label="Players">
+              <button type="button" data-count="1" aria-pressed="true">Solo</button>
+              <button type="button" data-count="2" aria-pressed="false">2</button>
+              <button type="button" data-count="3" aria-pressed="false">3</button>
+              <button type="button" data-count="4" aria-pressed="false">4</button>
+            </div>
+            <div id="player-names"></div>
+            <h3>Best on this map</h3>
+            <ol id="intro-scores" class="scores"></ol>
+          </div>
+        </div>
         <div class="intro-actions">
           <button id="intro-play" type="button" class="primary">Play</button>
           <button id="intro-lab" type="button">Explore the Hyperbolic Lab</button>
         </div>
         <p class="intro-foot">Best with sound · About 10 minutes · Words checked with Merriam-Webster's Scrabble dictionary</p>
+      </div>
+    </section>
+
+    <section id="handoff" hidden aria-labelledby="handoff-name">
+      <div class="summary-card">
+        <p class="handoff-label">Next up</p>
+        <h2 id="handoff-name"></h2>
+        <p class="handoff-hint">Pass the screen. Your letters stay hidden until you are ready.</p>
+        <ol id="handoff-scores" class="standings"></ol>
+        <button id="handoff-ready" type="button" class="primary">I'm ready</button>
       </div>
     </section>
 
@@ -151,7 +190,11 @@
       <div class="summary-card">
         <h2 id="summary-title">Run complete</h2>
         <p class="summary-score"><span id="summary-points">0</span> points</p>
+        <ol id="summary-standings" class="standings" hidden></ol>
         <dl id="summary-stats"></dl>
+        <ol id="summary-missions"></ol>
+        <h3 class="summary-heading">Best on this map</h3>
+        <ol id="summary-scores" class="scores"></ol>
         <ol id="summary-words"></ol>
         <div class="intro-actions">
           <button id="summary-again" type="button" class="primary">Play again</button>

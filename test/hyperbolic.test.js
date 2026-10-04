@@ -6,24 +6,33 @@ import {
   IDENTITY,
   SPHERICAL,
   abs,
+  abs2,
   arcThrough,
+  bounce,
   apply,
   compose,
   distance,
   drawnRadius,
   generateRound,
+  geodesicCircle,
+  geodesicStep,
+  headingTowards,
   generateStraightRound,
+  generateSquareRound,
+  generateTriangleRound,
   midpoint,
   radiusDrawnAs,
   polar,
   radiusAt,
   rotation,
+  stepTowards,
   stride,
   triangle,
   turnAtCentre,
   sub,
   tilingMirror,
   toCentre,
+  wallSide,
   walk,
 } from '../src/hyperbolic.js';
 import { mulberry32 } from '../src/random.js';
@@ -267,4 +276,69 @@ test('in a straight-line round the geodesic is the shortest path and really is a
     for (const z of paths[answer]) close(distance(player, z) + distance(z, target), whole, 1e-6);
     assert.ok(kinds.includes('segment'));
   }
+});
+
+test('in a triangle round the biggest triangle does not look biggest', () => {
+  const random = mulberry32(31);
+  for (let i = 0; i < 60; i++) {
+    const { triangles, areas, looks, answer } = generateTriangleRound(random);
+    assert.equal(areas.indexOf(Math.max(...areas)), answer);
+    assert.notEqual(looks.indexOf(Math.max(...looks)), answer);
+    assert.ok(Math.max(...looks) <= 1.3 * Math.min(...looks));
+    assert.ok(triangles.flat().every((z) => abs(z) <= 0.93));
+  }
+});
+
+test('a square walk from the centre ends where the round says, and not back at the start', () => {
+  const random = mulberry32(8);
+  for (let i = 0; i < 30; i++) {
+    const { side, end, options, answer, gap } = generateSquareRound(random);
+    assert.equal(options[answer], end);
+    assert.ok(options.some((z) => abs(z) < 1e-12), 'the flat answer is offered');
+    assert.ok(gap > 0.5);
+    // Walking it for real: the end point arrives at the centre.
+    let view = IDENTITY;
+    for (let leg = 0; leg < 4; leg++) view = compose(stride(Math.PI / 2 - (leg * Math.PI) / 2, side), view);
+    close(abs(apply(view, end)), 0, 1e-9);
+  }
+});
+
+test('many short geodesic steps land where one long one does, along the same line', () => {
+  const start = [0.4, -0.3];
+  const heading = 2.1;
+  let z = start;
+  let h = heading;
+  for (let i = 0; i < 200; i++) ({ z, heading: h } = geodesicStep(z, h, 0.01));
+  const once = geodesicStep(start, heading, 2);
+  close(z[0], once.z[0], 1e-9);
+  close(z[1], once.z[1], 1e-9);
+  close(distance(start, z), 2, 1e-9);
+  close(Math.cos(h - once.heading), 1, 1e-9);
+});
+
+test('heading towards a point and stepping gets there', () => {
+  const p = [0.5, 0.2];
+  const q = [-0.3, 0.6];
+  const { z } = geodesicStep(p, headingTowards(p, q), distance(p, q));
+  close(distance(z, q), 0, 1e-9);
+  let chaser = [0.6, -0.5];
+  for (let i = 0; i < 400; i++) chaser = stepTowards(chaser, q, 0.05);
+  close(distance(chaser, q), 0, 1e-12);
+});
+
+test('a wall through two points is a geodesic, and bouncing mirrors the heading in it', () => {
+  const a = [0.3, 0.4];
+  const b = [-0.5, 0.2];
+  const wall = geodesicCircle(a, b);
+  close(wallSide(wall, a), 0, 1e-9);
+  close(wallSide(wall, b), 0, 1e-9);
+  close(abs2(wall.centre), 1 + wall.radius ** 2, 1e-9); // meets the rim at right angles
+  close(wallSide(wall, midpoint(a, b)), 0, 1e-9); // the midpoint lies on it too
+  // Bouncing twice gives back the heading; head-on bounces reverse it.
+  const h = 0.7;
+  close(Math.cos(bounce(wall, a, bounce(wall, a, h)) - h), 1, 1e-12);
+  const across = Math.atan2(a[1] - wall.centre[1], a[0] - wall.centre[0]);
+  close(Math.cos(bounce(wall, a, across) - (across + Math.PI)), 1, 1e-12);
+  const line = geodesicCircle([0.2, 0.2], [-0.4, -0.4]);
+  assert.ok(line.line);
 });

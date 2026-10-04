@@ -1,5 +1,5 @@
 import { add, scale } from './geometry.js';
-import { readingOrder, slotKey } from './board.js';
+import { buildBoard, faceOf, readingOrder, slotKey, swingCell, swingNormal, swingTurns } from './board.js';
 import { BONUS_KINDS, placeBonuses } from './bonuses.js';
 import { LETTER_VALUES, TILE_COUNTS } from './level.js';
 import { mulberry32, shuffled } from './random.js';
@@ -32,9 +32,13 @@ export function createGame(level, board) {
     });
   }
 
+  // Bonus squares stay put, so none go on the swing bridge.
+  const free = (slot) => !letters.has(slot.key) && !board.bridgeCells?.has(slot.cell.join(','));
   const game = {
+    level,
+    bridge: level.bridgePosition ?? 0, // which way the swing bridge points
     slots: new Set(board.slots.keys()), // the slots a tile can be placed on
-    bonuses: placeBonuses(board, level.seed, (slot) => !letters.has(slot.key)), // slot key -> 'DL' | 'TL' | 'DW' | 'TW'
+    bonuses: placeBonuses(board, level.seed, free), // slot key -> 'DL' | 'TL' | 'DW' | 'TW'
     letters, // slot key -> letter on the board
     pending: [], // tiles placed this turn: { slot, letter, from (rack index) }
     rack: [],
@@ -119,6 +123,33 @@ export function swapRack(game) {
   return true;
 }
 
+// Swings the bridge to its other position, carrying any letters on it, and
+// returns the board as it now stands. It costs no turn, so players can try
+// both positions freely, but not while tiles are waiting to be played.
+export function swingBridge(game) {
+  const { bridge } = game.level;
+  if (!bridge || game.pending.length || game.finished) return null;
+  const board = boards.get(game);
+  const from = game.bridge;
+  const to = (from + 1) % bridge.dirs.length;
+  const turns = swingTurns(bridge, from, to);
+  const letters = new Map();
+  for (const [key, letter] of game.letters) {
+    const { cell, normal } = board.slots.get(key);
+    if (!board.bridgeCells.has(cell.join(','))) {
+      letters.set(key, letter);
+      continue;
+    }
+    letters.set(slotKey(swingCell(bridge, cell, turns), faceOf(swingNormal(normal, turns))), letter);
+  }
+  const next = buildBoard({ ...game.level, bridgePosition: to });
+  game.letters = letters;
+  game.bridge = to;
+  game.slots = new Set(next.slots.keys());
+  boards.set(game, next);
+  return { board: next, turns };
+}
+
 export function finishRun(game) {
   cancelPending(game);
   game.finished = true;
@@ -155,7 +186,7 @@ export function preparePlay(game, chain, viewDir) {
   if (game.letters.size && !main.slots.some((key) => game.letters.has(key)) && !cross.length) {
     return { error: 'Your word must use a letter already on the board.' };
   }
-  return { viewDir, main, cross, words: [main.word, ...cross.map((word) => word.word)] };
+  return { viewDir, main, cross, cyclic: Boolean(chain.cyclic), words: [main.word, ...cross.map((word) => word.word)] };
 }
 
 // Plays a word in one go with a dictionary that answers straight away, as
@@ -189,9 +220,20 @@ export function commitPlay(game, play) {
     total,
   };
 
+  const board = boards.get(game);
+  const onBridge = play.main.slots.some((key) => board.bridgeCells?.has(board.slots.get(key).cell.join(',')));
   for (const tile of placed) game.letters.set(tile.slot, tile.letter);
   game.pending = [];
-  game.history.push({ type: 'word', view: play.viewDir, word: play.main.word, slots: play.main.slots, placed, points });
+  game.history.push({
+    type: 'word',
+    view: play.viewDir,
+    word: play.main.word,
+    slots: play.main.slots,
+    placed,
+    points,
+    cyclic: play.cyclic,
+    onBridge,
+  });
   game.score += total;
   game.turnsLeft--;
   return { word: play.main.word, placed, points };

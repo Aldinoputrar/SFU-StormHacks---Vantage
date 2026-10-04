@@ -18,8 +18,8 @@ const PALETTES = {
   [FLAT]: { a: '#e3f1ea', b: '#c9e4d8', edge: '#7fa894' },
   [SPHERICAL]: { a: '#e9e4f7', b: '#d3caef', edge: '#8a78bf' },
 };
-const MAX_SEGMENTS = 8;
-const MAX_MARKERS = 8;
+const MAX_SEGMENTS = 12;
+const MAX_MARKERS = 14;
 export const DISK_SCALE = 0.48; // the disk's radius, as a share of the canvas's smaller side
 
 const MARKER_STYLES = { gem: 0, player: 1, star: 2 };
@@ -255,9 +255,10 @@ export function createDisk(canvas, { curvature = HYPERBOLIC } = {}) {
     // Where a world point is drawn, in CSS pixels from the canvas's corner.
     // Called for every point of every path each frame, so it uses the size
     // from the last resize rather than asking the page for layout.
-    pixelOf(z) {
+    // With onScreen, z is already a point of the screen disk.
+    pixelOf(z, onScreen = false) {
       const scale = DISK_SCALE * Math.min(size.width, size.height);
-      const [x, y] = disk.toScreen(z);
+      const [x, y] = onScreen ? z : disk.toScreen(z);
       return [size.width / 2 + x * scale, size.height / 2 - y * scale];
     },
 

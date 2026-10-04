@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import wordsUrl from '../node_modules/word-list/words.txt?url';
 import { createSound } from './audio.js';
-import { buildBoard, chainsForView, isJoined, nearestVantage } from './board.js';
+import { buildBoard, chainsForView, isJoined, nearestVantage, slotKey } from './board.js';
 import { BONUS_KINDS } from './bonuses.js';
 import { normalize, screenBasis } from './geometry.js';
 import { createChamber } from './chamber.js';
+import { createConfetti } from './confetti.js';
 import { createDictionary, createWordChecker } from './dictionary.js';
 import {
   RACK_SIZE,
@@ -19,13 +20,25 @@ import {
   preparePlay,
   refillRack,
   swapRack,
+  swingBridge,
   undoTile,
 } from './game.js';
 import { createHud } from './hud.js';
 import { createLab } from './lab.js';
-import { MONUMENT, VIEWS } from './level.js';
+import { saveScores, topScores } from './leaderboard.js';
+import { MAPS, MONUMENT, VIEWS } from './level.js';
+import { MISSION_POINTS, completeMissions } from './missions.js';
+import { MAX_PLAYERS, createPlayers, seat, standings, turnsFor } from './players.js';
 import { placementDirection, placementOptions } from './placement.js';
 import { BoardView } from './scene.js';
+import { Traveller } from './traveller.js';
+
+// A testing aid, in development only: ?raf=timer drives every animation from
+// a timer, for browser panes that pause animation frames while hidden.
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('raf') === 'timer') {
+  window.requestAnimationFrame = (callback) => setTimeout(() => callback(performance.now()), 16);
+  window.cancelAnimationFrame = clearTimeout;
+}
 
 const SNAP_ANGLE = THREE.MathUtils.degToRad(10); // release this close to a vantage and the camera snaps
 const HINT_ANGLE = THREE.MathUtils.degToRad(20);
@@ -39,9 +52,21 @@ const REVEAL_HOLD_MS = 2000;
 // each vantage point.
 const INTRO_VIEW = [1, 0.75, 0.25];
 const INTRO_SPIN = 0.09; // radians per second
+const SWING_MS = 700;
+const CELEBRATE_MS = 1500; // between a word scoring and the chamber opening
 
-const board = buildBoard(MONUMENT);
-const game = createGame(MONUMENT, board);
+// Both change when the swing bridge turns: the board is rebuilt, and drawn again.
+// The map comes from the address (?map=spire), so choosing one on the title
+// screen is a reload, and the monument behind the title is the one chosen.
+const LEVEL = MAPS.find(({ id }) => id === new URLSearchParams(window.location.search).get('map')) ?? MONUMENT;
+
+let board = buildBoard(LEVEL);
+const game = createGame(LEVEL, board);
+// Pass-and-play: everyone shares the board; seat() swaps in the rack, score
+// and missions of whoever's turn it is. Solo is one player.
+let players = createPlayers(['You'], LEVEL);
+let seated = seat(game, players, null, 0);
+const confetti = createConfetti(document.getElementById('confetti'));
 const sound = createSound();
 const chamber = createChamber({ sound });
 const lab = createLab({ sound });
@@ -72,8 +97,13 @@ const fill = new THREE.DirectionalLight('#ffffff', 0.9);
 fill.position.set(-6, -12, -8);
 scene.add(fill);
 
-const view = new BoardView(board, scene, game.bonuses);
+let view = new BoardView(board, scene, game.bonuses);
 for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed');
+
+// The traveller waits on the plaza and walks along every word played.
+const traveller = new Traveller(scene);
+const startSlot = () => board.slots.get(slotKey(LEVEL.start.cell, LEVEL.start.face));
+traveller.standOn(startSlot());
 
 const bounds = new THREE.Box3();
 for (const cell of board.cells) bounds.expandByPoint(new THREE.Vector3(...cell));
@@ -136,12 +166,16 @@ let selection = null; // { chain, cursor, clicked } while placing
 let lockedDir = null;
 let snap = null;
 let revealing = false; // showing how far apart joined strips really are
+let swinging = null; // { start, angle, cells, next } while the bridge turns
+let celebrating = false; // a word just scored
 let message = null;
 let messageTimer;
 // The camera is moving, a screen is over the monument or words are being
 // checked.
 const busy = () =>
-  Boolean(snap || revealing) || labOpen || mode === 'intro' || mode === 'chamber' || mode === 'checking';
+  Boolean(snap || revealing || swinging || celebrating) ||
+  labOpen ||
+  ['intro', 'chamber', 'checking', 'handoff'].includes(mode);
 const canLook = () => !busy() && (mode === 'explore' || mode === 'over');
 
 const hud = createHud({
@@ -158,6 +192,7 @@ const hud = createHud({
   },
   onSwap: swap,
   onFinish: finish,
+  onSwing: swing,
 });
 
 // Dashed bars across each hidden gap, drawn while revealing. WebGL lines are
@@ -259,10 +294,11 @@ function renderHud() {
       if (loops) headline += ' + an endless loop';
       hint = 'Click a glowing tile to play along it · Words must use a letter already on the board';
       // The first turn, from the home view: point at the illusion itself.
-      const home = joined.find((chain) => chain.slots.map((key) => letterAt(game, key) || '.').join('') === '.......ABLE');
-      if (!game.history.length && home) {
-        hint =
-          'ABLE floats blocks away, yet from here the plaza row runs straight into it. Click the glowing tile just before A and type T, C or S (or start four back for LOVE).';
+      // The first turn: point at the illusion itself.
+      const hooked = joined.find((chain) => !chain.cyclic && chain.slots.some((key) => letterAt(game, key)));
+      if (!game.history.length && hooked) {
+        const letters = hooked.slots.map((key) => letterAt(game, key)).join('');
+        hint = `${letters} floats blocks away, yet from here a row of empty tiles runs straight into it. Click a glowing tile next to it and type letters to make a word.`;
       }
     } else {
       headline = near && near.angle < HINT_ANGLE ? 'Something lines up nearby…' : 'Find where the strips line up';
@@ -288,6 +324,7 @@ function renderHud() {
     canPlace: placing && Boolean(selection) && !busy(),
     canIso: canLook(),
     canReveal: canLook() && current.chains.some(isJoined),
+    canSwing: canLook() && mode === 'explore' && Boolean(board.bridgeCells.size),
     canSwitch,
     switchLabel,
     headline,
@@ -296,6 +333,10 @@ function renderHud() {
     message,
   });
   document.getElementById('lab-open').disabled = !canLook();
+  document.getElementById('swing').hidden = !LEVEL.bridge;
+  const strip = document.getElementById('players');
+  strip.hidden = players.length < 2;
+  if (players.length > 1) renderStandings(strip);
   // On the very first turn, point at the button that shows the trick.
   document
     .getElementById('iso')
@@ -315,6 +356,9 @@ const compassPoint = (dir) => {
   const flat = Math.hypot(x, z) || 1;
   return [(r * x) / flat, (r * z) / flat];
 };
+// Vantage points are found again whenever the board is rebuilt, so they are
+// matched by direction.
+const dirKey = (dir) => dir.map((v) => Math.sign(Math.round(v * 1000))).join(',');
 const compassDots = board.vantages.map((vantage) => {
   const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
   const [cx, cy] = compassPoint(vantage.dir);
@@ -324,7 +368,7 @@ const compassDots = board.vantages.map((vantage) => {
   dot.setAttribute('class', 'vantage');
   dot.addEventListener('click', () => canLook() && animateTo(vantage.dir));
   compassVantages.append(dot);
-  return { dot, vantage };
+  return { dot, key: dirKey(vantage.dir) };
 });
 
 function drawCompass() {
@@ -333,10 +377,11 @@ function drawCompass() {
   compassYou.setAttribute('cx', cx);
   compassYou.setAttribute('cy', cy);
   const near = nearestVantage(board, dir);
-  for (const { dot, vantage } of compassDots) {
-    const here = near?.vantage === vantage && current.chains.some(isJoined);
+  const nearKey = near && dirKey(near.vantage.dir);
+  for (const { dot, key } of compassDots) {
+    const here = nearKey === key && current.chains.some(isJoined);
     dot.classList.toggle('here', here);
-    dot.classList.toggle('near', !here && near?.vantage === vantage && near.angle < HINT_ANGLE);
+    dot.classList.toggle('near', !here && nearKey === key && near.angle < HINT_ANGLE);
   }
 }
 
@@ -395,10 +440,13 @@ async function earnLetters(title) {
   mode = 'chamber';
   controls.enabled = false;
   renderHud();
-  const { score, skipped } = await chamber.play({ title, skippable: chamberStats.rounds > 0 });
+  // ?skip in the address offers the skip from the very first visit, for demos.
+  const skippable = chamberStats.rounds > 0 || new URLSearchParams(window.location.search).has('skip');
+  const { score, skipped } = await chamber.play({ title, skippable });
   if (!skipped) {
     chamberStats.right += score;
     chamberStats.rounds += 3;
+    rewardMissions(completeMissions(game.missions, { chamber: score }));
   }
   const drawn = refillRack(game, score + 1);
   mode = isOver(game) ? 'over' : 'explore';
@@ -606,12 +654,129 @@ async function play() {
   }
 
   const { word, placed, points } = commitPlay(game, prepared);
+  game.history.at(-1).player = players[seated].name;
   for (const tile of placed) view.setTile(tile.slot, tile.letter, 'fixed');
-  sound.word(points.total);
   const sources = [...new Set(results.map((result) => result.source))].join(' + ');
   setMessage(`${word}: ${describePoints(points)} · checked with ${sources}`, 'success', 7000);
   exitPlacing();
-  if (mode !== 'over') await earnLetters('Earn letters for your next word');
+  // A moment to enjoy the word, and watch the traveller walk it, before the
+  // chamber opens.
+  celebrating = true;
+  celebrate(prepared, points);
+  const walk = traveller.walkAlong(prepared.main.slots.map((key) => board.slots.get(key)));
+  rewardMissions(completeMissions(game.missions, { turn: game.history.at(-1) }));
+  await new Promise((resolve) => setTimeout(resolve, Math.max(CELEBRATE_MS, walk * 1000 + 400)));
+  celebrating = false;
+  refresh();
+  if (mode !== 'over') await endTurn('Earn letters for your next word');
+}
+
+// The word's tiles bounce in turn, flashing gold if it crossed the illusion;
+// the score rises over the monument; big words throw confetti.
+function celebrate(prepared, points) {
+  const crossed = points.surfaces > 1;
+  view.celebrate(prepared.main.slots, crossed);
+  sound.word(points.total);
+  const details = [];
+  if (crossed) details.push(`Across the illusion ×${points.surfaces}`);
+  if (points.bingo) details.push('All seven tiles +50');
+  showPopup(`+${points.total}`, details, points.total >= 40);
+  if (crossed || points.total >= 40) confetti.burst(window.innerWidth / 2, window.innerHeight * 0.4, crossed ? 90 : 60);
+}
+
+function showPopup(points, details = [], big = false, tone = '') {
+  const popup = document.getElementById('popup');
+  const card = document.createElement('div');
+  card.className = 'pop';
+  const value = document.createElement('span');
+  value.className = `points${big ? ' big' : ''}`;
+  value.textContent = points;
+  card.append(value);
+  for (const text of details) {
+    const detail = document.createElement('span');
+    detail.className = `detail ${tone}`;
+    detail.textContent = text;
+    card.append(document.createElement('br'), detail);
+  }
+  popup.replaceChildren(card);
+  card.addEventListener('animationend', () => card.remove());
+}
+
+// Missions just finished: points, a cheer and a tick.
+function rewardMissions(finished) {
+  if (!finished.length) return;
+  for (const mission of finished) game.score += MISSION_POINTS;
+  sound.right();
+  const text = finished.map((mission) => `Mission: ${mission.text}`);
+  setTimeout(() => {
+    showPopup(`+${MISSION_POINTS * finished.length}`, text, false, 'mission');
+    confetti.burst(130, 200, 50);
+  }, 900);
+  renderMissions(finished);
+  renderHud();
+}
+
+function renderMissions(just = []) {
+  document.getElementById('missions-title').textContent =
+    players.length > 1 ? `${players[seated].name}'s missions` : 'Missions';
+  document.getElementById('mission-list').replaceChildren(
+    ...game.missions.map((mission) => {
+      const item = document.createElement('li');
+      item.textContent = mission.text;
+      item.classList.toggle('done', mission.done);
+      item.classList.toggle('just', just.includes(mission));
+      return item;
+    }),
+  );
+}
+renderMissions();
+
+// Swings the bridge to its other position: the blocks turn, then the board
+// is rebuilt so its lines, joins and vantage points follow. Free, so players
+// can try both ways round.
+function swing() {
+  if (!canLook() || mode !== 'explore') return;
+  const cells = board.bridgeCells;
+  const result = swingBridge(game);
+  if (!result) return;
+  // Each quarter turn takes +x to +z, a turn of -90° about the vertical.
+  let angle = (-result.turns * Math.PI) / 2;
+  if (angle < -Math.PI) angle += 2 * Math.PI;
+  swinging = { start: performance.now(), angle, cells, next: result.board };
+  controls.enabled = false;
+  sound.walk();
+  setHover(null);
+  renderHud();
+}
+
+function stepSwing(now) {
+  const t = Math.min(1, (now - swinging.start) / SWING_MS);
+  const eased = t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
+  view.swing(swinging.cells, LEVEL.bridge.pivot, swinging.angle * eased);
+  if (t < 1) return;
+  board = swinging.next;
+  swinging = null;
+  view.dispose();
+  view = new BoardView(board, scene, game.bonuses);
+  for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed');
+  visibleCache = { key: '', view: null };
+  if (!board.slots.has(traveller.slot?.key)) traveller.standOn(startSlot());
+  else traveller.standOn(board.slots.get(traveller.slot.key));
+  controls.enabled = mode === 'explore' || mode === 'over';
+  sound.snap();
+  const onBridge = (key) => board.bridgeCells.has(board.slots.get(key).cell.join(','));
+  const joined = chainsForView(board, viewDir())
+    .chains.filter(isJoined)
+    .some((chain) => chain.slots.some(onBridge));
+  setMessage(
+    joined
+      ? 'The bridge has joined a new line from here.'
+      : game.bridge
+        ? 'The bridge now points at TION. Find the corner where they meet: try the top-left dot on the compass.'
+        : 'The bridge now points at the crown. Find the corner where they meet: try the bottom-right dot on the compass.',
+    'success',
+  );
+  refresh();
 }
 
 function describePoints({ letters, wordMultiplier, surfaces, cross, bingo, bonuses, total }) {
@@ -631,7 +796,65 @@ async function swap() {
     refresh();
     return;
   }
-  await earnLetters('Earn new letters');
+  await endTurn('Earn new letters');
+}
+
+// After a word or a swap: with more than one player, the next one takes the
+// seat and the screen is passed to them; then whoever is seated tops up
+// their letters in the chamber.
+async function endTurn(title) {
+  if (players.length > 1) {
+    seated = seat(game, players, seated, (seated + 1) % players.length);
+    renderMissions();
+    if (isOver(game)) {
+      mode = 'over';
+      refresh();
+      return;
+    }
+    await handoff(players[seated]);
+    title = game.rack.length ? title : 'Earn your first letters';
+  }
+  await earnLetters(players.length > 1 ? `${players[seated].name}: ${title.toLowerCase()}` : title);
+}
+
+// The card between turns, so the next player's letters stay hidden until
+// they take the screen.
+function handoff(player) {
+  mode = 'handoff';
+  controls.enabled = false;
+  renderHud();
+  const card = document.getElementById('handoff');
+  document.getElementById('handoff-name').textContent = `${player.name}'s turn`;
+  renderStandings(document.getElementById('handoff-scores'));
+  card.hidden = false;
+  sound.snap();
+  return new Promise((resolve) => {
+    document.getElementById('handoff-ready').onclick = () => {
+      card.hidden = true;
+      mode = 'explore';
+      resolve();
+    };
+  });
+}
+
+// Every player's score, best first, with the one in the seat marked.
+function renderStandings(list, { final = false } = {}) {
+  seat(game, players, seated, seated); // bring the seated player's score up to date
+  const ranked = standings(players);
+  list.replaceChildren(
+    ...ranked.map((player) => {
+      const item = document.createElement('li');
+      item.classList.toggle('active', !final && player.name === players[seated].name);
+      item.classList.toggle('winner', final && player.place === 1);
+      const name = document.createElement('span');
+      name.textContent = `${final ? `${player.place}. ` : ''}${player.name}`;
+      const score = document.createElement('span');
+      score.className = 'score';
+      score.textContent = player.score;
+      item.append(name, score);
+      return item;
+    }),
+  );
 }
 
 function finish() {
@@ -742,7 +965,28 @@ function showSummary() {
   const played = game.history.filter((turn) => turn.type === 'word');
   const best = played.reduce((top, turn) => (turn.points.total > (top?.points.total ?? -1) ? turn : top), null);
   const joined = played.filter((turn) => turn.points.surfaces > 1).length;
-  document.getElementById('summary-points').textContent = game.score;
+  seat(game, players, seated, seated); // bring the seated player's score up to date
+  const ranked = standings(players);
+  const multi = players.length > 1;
+  const winners = ranked.filter(({ place }) => place === 1);
+  document.getElementById('summary-title').textContent = !multi
+    ? 'Run complete'
+    : winners.length > 1
+      ? `A tie: ${winners.map(({ name }) => name).join(' and ')}`
+      : `${winners[0].name} wins!`;
+  document.getElementById('summary-points').textContent = multi ? ranked[0].score : game.score;
+  const standingsList = document.getElementById('summary-standings');
+  standingsList.hidden = !multi;
+  if (multi) renderStandings(standingsList, { final: true });
+  const fresh = saveScores(
+    players.map(({ name, score }) => ({
+      name,
+      score,
+      map: LEVEL.id,
+      words: played.filter((turn) => turn.player === name).length,
+    })),
+  );
+  renderScores(document.getElementById('summary-scores'), fresh);
   const stats = [
     ['Words', played.length],
     ['Across the illusion', joined],
@@ -767,12 +1011,24 @@ function showSummary() {
       item.classList.toggle('best', turn === best);
       const detail = turn.points.surfaces > 1 ? ` · ${turn.points.surfaces} surfaces` : '';
       item.innerHTML = '<span class="word"></span><span class="detail"></span>';
-      item.querySelector('.word').textContent = turn.word;
+      item.querySelector('.word').textContent = multi ? `${turn.word} · ${turn.player}` : turn.word;
       item.querySelector('.detail').textContent = `${turn.points.total} pts${detail}`;
       return item;
     }),
   );
+  document.getElementById('summary-missions').replaceChildren(
+    // Everyone has the same missions: one row each, naming who finished it.
+    ...players[0].missions.map((mission, i) => {
+      const finishers = players.filter((player) => player.missions[i].done).map(({ name }) => name);
+      const item = document.createElement('li');
+      const credit = !finishers.length ? '' : multi ? ` (${finishers.join(', ')} +${MISSION_POINTS})` : ` (+${MISSION_POINTS})`;
+      item.textContent = `${mission.text}${credit}`;
+      item.classList.toggle('done', finishers.length > 0);
+      return item;
+    }),
+  );
   document.getElementById('summary').hidden = false;
+  if (game.score > 0) confetti.burst(window.innerWidth / 2, window.innerHeight * 0.35, 120);
 }
 
 document.getElementById('summary-again').addEventListener('click', () => window.location.reload());
@@ -800,12 +1056,112 @@ document.getElementById('lab-open').addEventListener('click', openLab);
 document.getElementById('intro-lab').addEventListener('click', openLab);
 
 document.body.classList.add('intro');
+// The title screen's choices: the map (a reload, so the monument behind the
+// title changes), how many play and their names, remembered for next time.
+const SETUP_KEY = 'vantage-setup';
+let setup = { count: 1, names: [] };
+try {
+  setup = { ...setup, ...JSON.parse(localStorage.getItem(SETUP_KEY) ?? '{}') };
+} catch {
+  // No storage: the defaults will do.
+}
+const saveSetup = () => {
+  try {
+    localStorage.setItem(SETUP_KEY, JSON.stringify(setup));
+  } catch {
+    // Remembered for this visit only.
+  }
+};
+
+const mapChoice = document.getElementById('map-choice');
+mapChoice.replaceChildren(
+  ...MAPS.map((level) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = level.name.replace(/^The /, '');
+    button.setAttribute('aria-pressed', String(level === LEVEL));
+    button.addEventListener('click', () => {
+      if (level === LEVEL) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set('map', level.id);
+      window.location.assign(url);
+    });
+    return button;
+  }),
+);
+document.getElementById('map-blurb').textContent = LEVEL.blurb;
+
+function renderSetup() {
+  for (const button of document.querySelectorAll('#player-count [data-count]')) {
+    button.setAttribute('aria-pressed', String(Number(button.dataset.count) === setup.count));
+  }
+  const names = document.getElementById('player-names');
+  names.replaceChildren(
+    ...Array.from({ length: setup.count }, (_, i) => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.maxLength = 16;
+      input.placeholder = setup.count === 1 ? 'Your name' : `Player ${i + 1}`;
+      input.value = setup.names[i] ?? '';
+      input.setAttribute('aria-label', setup.count === 1 ? 'Your name' : `Player ${i + 1}'s name`);
+      input.addEventListener('input', () => {
+        setup.names[i] = input.value;
+        saveSetup();
+      });
+      return input;
+    }),
+  );
+}
+for (const button of document.querySelectorAll('#player-count [data-count]')) {
+  button.addEventListener('click', () => {
+    setup.count = Math.min(MAX_PLAYERS, Number(button.dataset.count));
+    saveSetup();
+    renderSetup();
+  });
+}
+renderSetup();
+
+// The best scores on a map, into a list; entries just saved are marked.
+function renderScores(list, fresh = []) {
+  const best = topScores(LEVEL.id);
+  if (!best.length) {
+    const empty = document.createElement('li');
+    empty.className = 'empty';
+    empty.textContent = 'No scores yet. Be the first.';
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(
+    ...best.map((entry) => {
+      const item = document.createElement('li');
+      item.classList.toggle('new', fresh.some((f) => f.at === entry.at && f.name === entry.name));
+      for (const [cls, text] of [
+        ['place', `${entry.place}.`],
+        ['name', entry.name],
+        ['score', entry.score],
+      ]) {
+        const part = document.createElement('span');
+        part.className = cls;
+        part.textContent = text;
+        item.append(part);
+      }
+      return item;
+    }),
+  );
+}
+renderScores(document.getElementById('intro-scores'));
+
 document.getElementById('intro-play').addEventListener('click', () => {
   sound.unlock();
+  players = createPlayers(Array.from({ length: setup.count }, (_, i) => setup.names[i] ?? ''), LEVEL);
+  seated = seat(game, players, null, 0);
+  game.turnsLeft = turnsFor(LEVEL, players.length);
+  renderMissions();
   document.getElementById('intro').hidden = true;
   document.body.classList.remove('intro');
   mode = 'explore';
-  animateTo(OVERHEAD, () => earnLetters('Earn your first letters'));
+  const title = players.length > 1 ? `${players[0].name}: earn your first letters` : 'Earn your first letters';
+  animateTo(OVERHEAD, () => earnLetters(title));
 });
 
 const muteButton = document.getElementById('mute');
@@ -836,7 +1192,9 @@ renderer.setAnimationLoop((time) => {
     controls.update();
   }
   if (snap) stepSnap(performance.now());
+  if (swinging) stepSwing(performance.now());
   view.animate(time / 1000);
+  traveller.update(time / 1000);
   renderer.render(scene, camera);
 });
 

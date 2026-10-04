@@ -60,8 +60,45 @@ function expandBlocks(runs) {
   return { cells: [...cells.values()], colors };
 }
 
+// The swing bridge's block run in its current position, if the level has one.
+export function bridgeRun(level) {
+  const { bridge, bridgePosition = 0 } = level;
+  if (!bridge) return null;
+  return { start: bridge.pivot, dir: bridge.dirs[bridgePosition], length: bridge.length, color: bridge.color };
+}
+
+// A quarter turn about the vertical axis, taking +x to +z.
+const quarterTurn = ([x, y, z]) => [-z, y, x];
+
+// How many quarter turns take the bridge from one position to another.
+export function swingTurns(bridge, from, to) {
+  let dir = bridge.dirs[from];
+  for (let turns = 0; turns < 4; turns++, dir = quarterTurn(dir)) {
+    if (dir.every((v, i) => v === bridge.dirs[to][i])) return turns;
+  }
+  throw new Error('Bridge positions must be quarter turns of each other');
+}
+
+// Where a cell of the bridge, and the way a face of it points, go when the
+// bridge swings by that many quarter turns about its pivot.
+export function swingCell(bridge, cell, turns) {
+  let offset = sub(cell, bridge.pivot);
+  for (let i = 0; i < turns; i++) offset = quarterTurn(offset);
+  return add(bridge.pivot, offset);
+}
+
+export function swingNormal(normal, turns) {
+  let out = normal;
+  for (let i = 0; i < turns; i++) out = quarterTurn(out);
+  return out;
+}
+
 export function buildBoard(level) {
-  const { cells, colors } = expandBlocks(level.blocks);
+  const run = bridgeRun(level);
+  const { cells, colors } = expandBlocks(run ? [...level.blocks, run] : level.blocks);
+  const bridgeCells = new Set(
+    run ? Array.from({ length: run.length }, (_, i) => cellKey(add(run.start, scale(run.dir, i)))) : [],
+  );
   const solid = new Set(cells.map(cellKey));
   const isSolid = (x, y, z) => solid.has(`${x},${y},${z}`);
 
@@ -96,7 +133,7 @@ export function buildBoard(level) {
     }
   }
 
-  const board = { cells, colors, isSolid, slots, lines };
+  const board = { cells, colors, isSolid, slots, lines, bridgeCells };
   board.joins = findJoins(board);
   board.loops = (level.loops ?? []).map((loop, i) => buildLoop(board, loop, i));
   board.vantages = findVantages(board);

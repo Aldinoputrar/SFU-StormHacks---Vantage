@@ -247,3 +247,105 @@ export function generateStraightRound(random = Math.random) {
   }
   throw new Error('Could not lay out a straight-line round');
 }
+
+// A "biggest triangle" round, in screen coordinates: three geodesic
+// triangles that look about the same size (within ±15% in drawn area) but
+// differ in true area. Nearer the rim, where space is stretched, a triangle
+// that looks the same holds far more. The one that looks biggest is never the
+// answer, and the answer is clearly the biggest.
+export function generateTriangleRound(random = Math.random) {
+  const drawnArea = ([a, b, c]) => Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
+  for (let attempt = 0; attempt < 2000; attempt++) {
+    const turn = 2 * Math.PI * random();
+    const radii = shuffled([0.22, 0.48, 0.7], random).map((r) => r + 0.06 * (random() - 0.5));
+    const triangles = radii.map((r, i) => {
+      const middle = polar(r, turn + (i * 2 * Math.PI) / 3);
+      const size = 0.15 * (0.85 + 0.3 * random());
+      const tilt = 2 * Math.PI * random();
+      return [0, 1, 2].map((k) => add(middle, polar(size, tilt + (k * 2 * Math.PI) / 3 + 0.3 * (random() - 0.5))));
+    });
+    if (triangles.flat().some((z) => abs(z) > 0.93)) continue;
+    const looks = triangles.map(drawnArea);
+    if (Math.max(...looks) > 1.3 * Math.min(...looks)) continue;
+    const areas = triangles.map((corners) => triangle(...corners).area);
+    const ranked = [0, 1, 2].sort((a, b) => areas[b] - areas[a]);
+    const answer = ranked[0];
+    if (areas[answer] < 1.25 * areas[ranked[1]]) continue;
+    if (looks.indexOf(Math.max(...looks)) === answer) continue;
+    return { triangles, areas, looks, answer };
+  }
+  throw new Error('Could not lay out a triangle round');
+}
+
+// A "where will you end up" round: the player, at the centre, will walk a
+// square of the given side (up, right, down, left). Where they truly end is
+// one of three places to choose from; another is where they started, which
+// is where they would end on a flat plane.
+export function generateSquareRound(random = Math.random) {
+  const side = 1 + 0.3 * random();
+  let view = IDENTITY;
+  for (let leg = 0; leg < 4; leg++) view = compose(stride(Math.PI / 2 - (leg * Math.PI) / 2, side), view);
+  const end = apply(invert(view), [0, 0]); // where the walk ends, in today's screen
+  const options = shuffled([end, [0, 0], [-end[1], end[0]]], random);
+  return { side, end, options, answer: options.indexOf(end), gap: distance(end, [0, 0]) };
+}
+
+// Moving things along geodesics, for the chamber's action games. A moving
+// thing is a point z and a heading φ: the direction it is going at z, as an
+// ordinary angle in the disk (Möbius maps keep angles, so that is enough).
+//
+// One step of length ds: slide z to the centre, where the geodesic is the
+// straight diameter at angle φ, step along it, and slide back with
+// M(w) = (w + z) / (1 + z̄w). The heading turns by the argument of
+// M'(w) = (1 - |z|²) / (1 + z̄w)², which is -2 arg(1 + z̄w).
+export function geodesicStep(z, heading, ds) {
+  const w = polar(Math.tanh(ds / 2), heading);
+  const back = invert(toCentre(z));
+  const lean = add(ONE, mul(conj(z), w));
+  return { z: apply(back, w), heading: heading - 2 * Math.atan2(lean[1], lean[0]) };
+}
+
+// The heading at p that points along the geodesic towards q.
+export function headingTowards(p, q) {
+  const v = apply(toCentre(p), q);
+  return Math.atan2(v[1], v[0]);
+}
+
+// A step of length ds from z towards p, stopping at p.
+export function stepTowards(z, p, ds) {
+  const left = distance(z, p);
+  if (left <= ds) return p;
+  return geodesicStep(z, headingTowards(z, p), ds).z;
+}
+
+// The geodesic through a and b, as the circle that carries it (centre and
+// radius, meeting the rim at right angles) or, through the centre, a line
+// (a point on it and its direction).
+export function geodesicCircle(a, b) {
+  // Circles orthogonal to the rim through a pass through its inverse a/|a|²
+  // too, so the circle is the one through a, b and a/|a|².
+  const far = abs2(a) > 1e-12 ? scaleBy(a, 1 / abs2(a)) : null;
+  const d = far && 2 * (a[0] * (b[1] - far[1]) + b[0] * (far[1] - a[1]) + far[0] * (a[1] - b[1]));
+  if (!far || Math.abs(d) < 1e-9) return { line: true, through: a, direction: Math.atan2(b[1] - a[1], b[0] - a[0]) };
+  const ux = (abs2(a) * (b[1] - far[1]) + abs2(b) * (far[1] - a[1]) + abs2(far) * (a[1] - b[1])) / d;
+  const uy = (abs2(a) * (far[0] - b[0]) + abs2(b) * (a[0] - far[0]) + abs2(far) * (b[0] - a[0])) / d;
+  return { centre: [ux, uy], radius: abs(sub(a, [ux, uy])) };
+}
+
+// Which side of a wall a point is on (the sign), for spotting a crossing.
+export function wallSide(wall, z) {
+  if (wall.line) {
+    const [x, y] = sub(z, wall.through);
+    return Math.cos(wall.direction) * y - Math.sin(wall.direction) * x;
+  }
+  return abs2(sub(z, wall.centre)) - wall.radius * wall.radius;
+}
+
+// The heading after bouncing off a wall at z: mirrored in the wall's tangent
+// there, the angle of incidence equalling the angle of reflection.
+export function bounce(wall, z, heading) {
+  const tangent = wall.line
+    ? wall.direction
+    : Math.atan2(z[1] - wall.centre[1], z[0] - wall.centre[0]) + Math.PI / 2;
+  return 2 * tangent - heading;
+}

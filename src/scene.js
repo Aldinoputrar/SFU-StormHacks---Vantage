@@ -4,6 +4,9 @@ import { LETTER_VALUES } from './level.js';
 
 const TILE_SIZE = 0.84;
 const HEIGHT = { empty: 0.02, fixed: 0.09, pending: 0.09 };
+const POP_S = 0.35; // how long a tile takes to pop when it lands or scores
+const POP_STAGGER_S = 0.06; // a word's tiles pop one after another
+const FLASH = new THREE.Color('#ffd54a');
 const COLORS = {
   stone: '#b9a7c9', // blocks whose run gives no colour
   fixed: '#fff3dc',
@@ -91,6 +94,8 @@ export class BoardView {
     this.tiles = new Map();
     this.pickables = [];
     this.highlights = new Map();
+    this.pops = new Map(); // slot key -> { start (s), flash }: tiles bouncing as they land or score
+    this.swinging = null; // the bridge's meshes while it swings
     // Made for this board and released by dispose. Textures and the materials
     // shared by colour are cached for the whole page, so they are kept.
     this.ownedGeometries = new Set();
@@ -150,10 +155,37 @@ export class BoardView {
     tile.face.needsUpdate = true;
     for (const i of [0, 1, 3, 4, 5]) tile.materials[i] = sideMaterial(style, stone);
 
-    const height = HEIGHT[style];
-    const normal = vec(tile.slot.normal);
-    tile.mesh.scale.set(1, height, 1);
-    tile.mesh.position.copy(vec(tile.slot.center)).addScaledVector(normal, height / 2);
+    this.place(tile, 1, 1);
+    if (style === 'pending') this.pops.set(key, { start: performance.now() / 1000, flash: false });
+  }
+
+  // Sizes a tile: spread across its face and lift above it.
+  place(tile, spread, lift) {
+    const height = HEIGHT[tile.style] * lift;
+    tile.mesh.scale.set(spread, height, spread);
+    tile.mesh.position.copy(vec(tile.slot.center)).addScaledVector(vec(tile.slot.normal), height / 2);
+  }
+
+  // A scored word: its tiles bounce one after another, flashing gold when
+  // the word crossed the illusion.
+  celebrate(keys, flash = false) {
+    const now = performance.now() / 1000;
+    keys.forEach((key, i) => this.tiles.has(key) && this.pops.set(key, { start: now + i * POP_STAGGER_S, flash }));
+  }
+
+  // Turns the cells of the swing bridge about the vertical axis through its
+  // pivot, by angle radians, ready for the board to be rebuilt in the new
+  // position. Their original places are remembered on the first call.
+  swing(cells, pivot, angle) {
+    this.swinging ??= this.group.children
+      .filter((mesh) => cells.has((mesh.userData.cell ?? this.tiles.get(mesh.userData.slot)?.slot.cell)?.join(',')))
+      .map((mesh) => ({ mesh, position: mesh.position.clone(), quaternion: mesh.quaternion.clone() }));
+    const centre = vec(pivot);
+    const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+    for (const { mesh, position, quaternion } of this.swinging) {
+      mesh.position.copy(position).sub(centre).applyQuaternion(turn).add(centre);
+      mesh.quaternion.copy(turn).multiply(quaternion);
+    }
   }
 
   // kind: 'aligned' | 'hover' | 'hoverAligned' | 'selected' | 'cursor'
@@ -212,6 +244,23 @@ export class BoardView {
       const face = this.tiles.get(key).face;
       face.emissive.copy(glow.color);
       face.emissiveIntensity = glow.base + glow.pulse * Math.sin(time * glow.speed);
+    }
+    for (const [key, { start, flash }] of this.pops) {
+      const tile = this.tiles.get(key);
+      const t = (time - start) / POP_S;
+      if (!tile || t < 0) continue;
+      if (t >= 1) {
+        this.place(tile, 1, 1);
+        if (!this.highlights.has(key)) tile.face.emissiveIntensity = 0;
+        this.pops.delete(key);
+        continue;
+      }
+      const bump = Math.sin(Math.PI * t);
+      this.place(tile, 1 + 0.28 * bump, 1 + 3 * bump);
+      if (flash) {
+        tile.face.emissive.copy(FLASH);
+        tile.face.emissiveIntensity = Math.max(tile.face.emissiveIntensity, 0.9 * (1 - t));
+      }
     }
   }
 }

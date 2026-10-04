@@ -17,10 +17,11 @@ import {
   preparePlay,
   refillRack,
   swapRack,
+  swingBridge,
   undoTile,
 } from '../src/game.js';
 import { normalize, rayHitsVoxel } from '../src/geometry.js';
-import { MONUMENT, VIEWS } from '../src/level.js';
+import { MAPS, MONUMENT, VIEWS } from '../src/level.js';
 
 const board = buildBoard(MONUMENT);
 const HOME = normalize(VIEWS.southEast);
@@ -387,4 +388,61 @@ test('taking tiles back returns them to where they were in the rack', () => {
   assert.ok(placeTile(game, chain.slots[2], 5)); // G
   cancelPending(game);
   assert.deepEqual(game.rack, ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
+});
+
+test('the swing bridge joins the crown from the home view, and TION from the opposite corner', () => {
+  const at = (game, b) => (v) =>
+    chainsForView(b, normalize(v)).chains
+      .filter(isJoined)
+      .filter((chain) => chain.slots.some((key) => b.bridgeCells.has(b.slots.get(key).cell.join(','))))
+      .map((chain) => lettersOf(game, chain));
+  const game = createGame(MONUMENT, board);
+  assert.deepEqual(at(game, board)(VIEWS.southEast), ['......O.']);
+  const { board: swung } = swingBridge(game);
+  assert.equal(game.bridge, 1);
+  assert.ok(at(game, swung)(VIEWS.northWest).some((letters) => letters.endsWith('TION')), at(game, swung)(VIEWS.northWest));
+  assert.deepEqual(at(game, swung)(VIEWS.southEast), []);
+  // Every joined line of the base monument survives the swing.
+  for (const { dir } of board.vantages) {
+    assert.ok(chainsForView(swung, dir).chains.filter(isJoined).length >= chainsForView(board, dir).chains.filter(isJoined).length - 1);
+  }
+});
+
+test('letters on the bridge swing with it, and swinging back restores them', () => {
+  const game = createGame(MONUMENT, board);
+  const key = slotKey([-4, 5, -2], '+y');
+  game.letters.set(key, 'Q');
+  const { board: swung } = swingBridge(game);
+  const moved = [...game.letters].find(([, letter]) => letter === 'Q')[0];
+  assert.notEqual(moved, key);
+  assert.ok(swung.slots.has(moved));
+  swingBridge(game);
+  assert.equal(game.letters.get(key), 'Q');
+  assert.equal(game.bridge, 0);
+});
+
+test('the bridge will not swing while tiles wait to be played, and holds no bonus squares', () => {
+  const game = createGame(MONUMENT, board);
+  for (const key of game.bonuses.keys()) assert.ok(!board.bridgeCells.has(board.slots.get(key).cell.join(',')), key);
+  game.rack = ['A'];
+  placeTile(game, slotKey([-4, 5, -2], '+y'), 0);
+  assert.equal(swingBridge(game), null);
+});
+
+test('every map joins lines from all four corners, and each hook reads the right way round', () => {
+  const expected = {
+    monument: ['.......ABLE', '.......RISE', '.......STAR', '.......TION'],
+    spire: ['...IGHT', '...OUND', '...LESS', '...NESS'],
+    courtyard: ['...........ATE.', '...........ING.', '...........LESS', '...........OUND', 'OVER...........', 'FORE...........', 'BACK...........', 'DOWN...........'],
+  };
+  for (const level of MAPS) {
+    const mapBoard = buildBoard(level);
+    const game = createGame(level, mapBoard);
+    assert.equal(mapBoard.vantages.length, 4, level.id);
+    const read = mapBoard.vantages.flatMap(({ dir }) =>
+      chainsForView(mapBoard, dir).chains.filter(isJoined).map((chain) => lettersOf(game, chain)),
+    );
+    for (const hook of expected[level.id]) assert.ok(read.includes(hook), `${level.id}: ${hook} not in ${read}`);
+    assert.ok(mapBoard.slots.has(slotKey(level.start.cell, level.start.face)), `${level.id}: the traveller's start`);
+  }
 });

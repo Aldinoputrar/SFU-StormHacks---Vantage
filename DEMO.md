@@ -2,6 +2,12 @@
 
 A three-minute walkthrough for judges, written for the Beyond Euclid challenge. Each beat names the criterion it serves. Before you start, open the game with sound on and the window at least 1280 px wide (the compass hides on narrow screens).
 
+Useful addresses for a demo:
+
+- `?game=golf` (or `dash`, `swarm`, `bounce`) and `?quiz=square` (or `closest`, `straight`, `triangle`) choose the chamber's rounds, so you can show the one you want.
+- `?skip` offers "Skip the chamber" from the very first visit, to get to the board quickly.
+- `?map=spire` or `?map=courtyard` opens another map. They combine: `?map=spire&game=golf&skip`.
+
 ## 0:00 – The hook (title screen)
 
 > "Vantage is Scrabble played on two kinds of impossible space. The board is an Escher-style monument where words only join up from the right viewpoint, and you earn your letters in the hyperbolic plane."
@@ -10,19 +16,23 @@ Let the title screen sit for a moment: the monument turns behind it and flashes 
 
 ## 0:20 – Hyperbolic Chamber (*Geometric creativity, Educational value*)
 
-Press **Play**.
+Open with `?game=golf` and press **Play**.
+
+> "You earn your letters by playing in hyperbolic space. This is golf: the ball rolls along a true straight line."
+
+Drag back from the ball, aiming straight at the hole, and let go. It curves away and misses.
+
+> "Straight lines here bow towards the centre. In our tests, aiming straight at the hole on screen misses every single time."
+
+Aim a little inward and sink it. Then the quiz:
 
 > "Three crystals look equally far away and equally big. Only one is truly closest. The floor tiles are all the same size in hyperbolic terms, so the honest way to judge is to count tiles, not pixels."
 
 Pick one. When the dashed geodesics appear:
 
-> "Each dash is half a unit of true distance. The straight lines are arcs, because geodesics in the Poincaré disk meet the rim at right angles."
+> "Each dash is half a unit of true distance. There are four action games and four quizzes, mixed differently every visit."
 
-Round two asks a different question: three paths to a gold crystal.
-
-> "Which one is truly straight? Most people pick the one that looks straight. It's longer: the real straight line bows towards the centre, where space is cheapest."
-
-After the third round the crystals slide to the middle and become a triangle:
+After a closest-crystal quiz the crystals slide to the middle and become a triangle:
 
 > "Its angles add up to less than 180°, and by Gauss–Bonnet the missing angle is exactly its area. We compute that live. Crystal sizes are normalised so the biggest-looking one isn't a giveaway; before that fix it was the answer 100% of the time."
 
@@ -41,6 +51,14 @@ Click the tile just before A and type **T** (or **LOVE** from four tiles back). 
 Press **Reveal the trick**: the camera swings away and dashed bars show the real gaps.
 
 > "The maths is one fact: an orthographic camera looking along d can't see anything parallel to d, so two strips join exactly when the gap between them is parallel to the view. We solve that for every pair of strip ends at load time, keep the four Monument Valley corners, and ray-march the voxel grid so a hidden end never counts."
+
+Point at the blue bridge: from the home view it runs straight into the crown. Press **Swing the bridge**: it turns a quarter turn and points at TION instead. Click the north-west dot on the compass, and the bridge and TION join into one line.
+
+> "The monument changes. Swing the bridge and a new line joins, from a new corner. The board rebuilds its joins every time, so the puzzle keeps moving."
+
+Play a word across the gap and let it land: the tiles bounce, the score rises, and the traveller walks the word.
+
+> "Watch the little traveller cross the gap. In 3D they are stepping through thin air; from this angle it is one ordinary step."
 
 If there's time, click a crown tile from the home view: the Penrose crown is an endless 12-tile loop that words can wrap around.
 
@@ -64,7 +82,7 @@ Walk a loop with W A S D and come back to the star:
 
 ## 2:45 – Close (*Technical execution, Documentation*)
 
-> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. Seventy-six Node tests cover alignment, rules, the dictionary and the maths in all three geometries. The README explains every formula."
+> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. Ninety-nine Node tests cover alignment, rules, the dictionary, the maths in all three geometries, and even play the four action games. There are three maps, pass-and-play for four, and a leaderboard. The README explains every formula."
 
 ## Questions you might get
 
