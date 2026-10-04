@@ -82,9 +82,17 @@ Walk a loop with W A S D and come back to the star:
 
 > "I never turned, because every step is a pure translation, yet the north arrow painted at home now points elsewhere. That's holonomy, and the angle equals the area my loop enclosed. Our tests check it against Gauss–Bonnet to six decimal places."
 
+## Optional – Play together (*UX, Polish*)
+
+On the title screen press **Create a room** and read out the four-letter code; a judge joins from their own phone or laptop with **Join** (or the invite link). Start the game.
+
+> "No server: the browsers talk to each other directly. Each player takes their turn on their own screen, chamber and all, and when it ends the whole game is sent across as a snapshot. Watch your screen when I play a word."
+
+Play a word: it bounces on their screen and the traveller walks it there too.
+
 ## 2:45 – Close (*Technical execution, Documentation*)
 
-> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. A hundred Node tests cover alignment, rules, the dictionary, the maths in all three geometries, and even play the four action games. There are four maps, pass-and-play for four, and a leaderboard. The README explains every formula."
+> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. 117 Node tests cover alignment, rules, the dictionary, the maths in all three geometries, and even play the four action games. There are four maps, online rooms and pass-and-play for four, and a leaderboard. The README explains every formula."
 
 ## Questions you might get
 

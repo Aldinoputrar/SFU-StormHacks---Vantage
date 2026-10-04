@@ -207,6 +207,8 @@ Open the printed local URL and press **Play**. You start in the Hyperbolic Chamb
 
 To check words with Merriam-Webster, the server must be able to reach `scrabble.merriam.com`. If it can't (offline, or a network that blocks the site), the game still works with the offline list.
 
+To put it online, deploy to Vercel (`npx vercel`, then `npx vercel --prod`): [`vercel.json`](vercel.json) already relays the dictionary checks, and online rooms need nothing more, since they are peer to peer.
+
 For demos, the address can choose what to show: `?map=plaza`, `?map=spire` or `?map=courtyard` for another map, `?game=golf` (or `dash`, `swarm`, `bounce`) and `?quiz=square` (or `closest`, `straight`, `triangle`) for the chamber's rounds, and `?skip` to offer skipping the chamber from the first visit.
 
 ```bash
