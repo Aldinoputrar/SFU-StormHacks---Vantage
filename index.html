@@ -13,7 +13,6 @@
       <div id="view-buttons">
         <button id="iso" type="button">Isometric view</button>
         <button id="reveal" type="button" disabled>Reveal the trick</button>
-        <button id="turn" type="button" title="Spend a turn rotating the blue ledge">Turn the ledge</button>
       </div>
     </header>
 
@@ -37,7 +36,27 @@
         <button id="undo" type="button">Undo <kbd>⌫</kbd></button>
         <button id="cancel" type="button">Cancel <kbd>Esc</kbd></button>
       </div>
+      <div id="turn-actions">
+        <button id="swap" type="button" title="Send your letters back and earn new ones (uses a turn)">Swap</button>
+        <button id="finish" type="button">Finish</button>
+      </div>
     </footer>
+
+    <section id="chamber" hidden aria-labelledby="chamber-title">
+      <div class="chamber-card">
+        <header>
+          <h2 id="chamber-title">Hyperbolic Chamber</h2>
+          <span id="chamber-round"></span>
+        </header>
+        <p id="chamber-prompt"></p>
+        <div class="chamber-stage">
+          <canvas id="chamber-canvas"></canvas>
+          <div id="chamber-labels"></div>
+        </div>
+        <p id="chamber-result" aria-live="polite"></p>
+        <button id="chamber-go" type="button" hidden></button>
+      </div>
+    </section>
 
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -35,7 +35,8 @@ const AXES = [
 
 const MIN_FACING = 0.2; // a face must point at least this much toward the camera
 const MIN_STEP = 0.5; // tiles squashed below this on screen are unreadable
-const MIN_JOINED_LENGTH = 3; // two lone tiles meeting at a corner are not a line
+const MIN_JOIN_PART = 2; // a lone tile lines up with something from almost anywhere
+const MIN_GAP = 0.9; // strips that touch round a block's edge are not an illusion
 export const ALIGN_TOLERANCE = (2 * Math.PI) / 180;
 
 const cellKey = (cell) => cell.join(',');
@@ -45,19 +46,22 @@ export function faceOf(normal) {
   return Object.keys(FACE_NORMALS).find((face) => dot(FACE_NORMALS[face], normal) > 0.5);
 }
 
+// Cells of the level's block runs, and the colour of each (runs may give one).
 function expandBlocks(runs) {
   const cells = new Map();
-  for (const { start, dir, length: count } of runs) {
+  const colors = new Map();
+  for (const { start, dir, length: count, color } of runs) {
     for (let i = 0; i < count; i++) {
       const cell = add(start, scale(dir, i));
       cells.set(cellKey(cell), cell);
+      if (color) colors.set(cellKey(cell), color);
     }
   }
-  return [...cells.values()];
+  return { cells: [...cells.values()], colors };
 }
 
 export function buildBoard(level) {
-  const cells = expandBlocks(level.blocks);
+  const { cells, colors } = expandBlocks(level.blocks);
   const solid = new Set(cells.map(cellKey));
   const isSolid = (x, y, z) => solid.has(`${x},${y},${z}`);
 
@@ -92,7 +96,7 @@ export function buildBoard(level) {
     }
   }
 
-  const board = { cells, isSolid, slots, lines };
+  const board = { cells, colors, isSolid, slots, lines };
   board.joins = findJoins(board);
   board.loops = (level.loops ?? []).map((loop, i) => buildLoop(board, loop, i));
   board.vantages = findVantages(board);
@@ -116,25 +120,26 @@ function lineEnds(board, line) {
 // where b.inward = -b.outward. Both differences must lie along d, which fixes d
 // up to sign; the sign is chosen so both faces point toward the camera.
 //
-// Only the cube's 26 symmetry directions (towards its faces, edges and
-// corners) count, like the fixed views in Monument Valley. Any two parallel
-// strips line up from *some* angle; limiting the angles keeps that special.
+// Only the four isometric views from above count, the four rotations of a
+// Monument Valley level. Any two parallel strips line up from *some* angle;
+// limiting the angles keeps that special.
 function joinDirection(a, b) {
   const w = add(a.outward, b.outward);
   const offset = sub(b.slot.center, add(a.slot.center, a.outward));
 
   let d;
+  if (length(offset) < MIN_GAP) return null;
   if (length(w) < EPSILON) {
-    if (length(offset) < EPSILON) return null;
     d = normalize(offset);
   } else {
     if (length(cross(offset, w)) > 1e-6) return null;
     d = normalize(w);
   }
-  if (!isSymmetryDirection(d)) return null;
+  if (!isIsometric(d)) return null;
 
   for (const sign of [1, -1]) {
     const dir = scale(d, sign);
+    if (dir[1] <= 0) continue; // views from below are for looking, not lining up
     if (dot(a.slot.normal, dir) < MIN_FACING || dot(b.slot.normal, dir) < MIN_FACING) continue;
     if (length(onScreen(a.outward, dir)) < MIN_STEP) continue;
     return dir;
@@ -142,13 +147,9 @@ function joinDirection(a, b) {
   return null;
 }
 
-// Directions whose components, scaled so the largest is 1, are all 0 or 1.
-function isSymmetryDirection(d) {
-  const largest = Math.max(...d.map(Math.abs));
-  return d.every((v) => {
-    const ratio = Math.abs(v) / largest;
-    return ratio < 1e-6 || ratio > 1 - 1e-6;
-  });
+// Directions along a diagonal of the cube, like (1, 1, 1) or (-1, 1, 1).
+function isIsometric(d) {
+  return d.every((v) => Math.abs(Math.abs(v) - Math.abs(d[0])) < 1e-6);
 }
 
 // True when nothing blocks the view of any of the tiles from direction dir.
@@ -175,7 +176,7 @@ function findJoins(board) {
     for (let j = i + 1; j < ends.length; j++) {
       const a = ends[i];
       const b = ends[j];
-      if (a.line === b.line || a.line.slots.length + b.line.slots.length < MIN_JOINED_LENGTH) continue;
+      if (a.line === b.line || Math.min(a.line.slots.length, b.line.slots.length) < MIN_JOIN_PART) continue;
       const dir = joinDirection(a, b);
       if (!dir || !slotsVisible(board, a.line.slots, dir) || !slotsVisible(board, b.line.slots, dir)) continue;
       joins.push({ a: { line: a.line.id, end: a.end }, b: { line: b.line.id, end: b.end }, dir });
@@ -350,6 +351,10 @@ function orientLoop(board, chain, viewDir) {
   if (area < 0) return chain;
   return { ...chain, slots: [...chain.slots].reverse(), slotLines: [...chain.slotLines].reverse() };
 }
+
+// The slots of a straight run in the order they read from viewDir.
+export const readingOrder = (board, slots, viewDir) =>
+  orient(board, { lines: [], slots, slotLines: slots.map(() => null) }, viewDir).slots;
 
 // Words read left to right on screen, or top to bottom when nearly vertical.
 function orient(board, chain, viewDir) {

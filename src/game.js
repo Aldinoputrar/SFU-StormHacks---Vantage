@@ -1,18 +1,23 @@
 import { add, scale } from './geometry.js';
-import { faceOf, slotKey } from './board.js';
+import { readingOrder, slotKey } from './board.js';
 import { BONUS_KINDS, placeBonuses } from './bonuses.js';
 import { LETTER_VALUES, TILE_COUNTS } from './level.js';
 import { mulberry32, shuffled } from './random.js';
-import { turnOnce, turnedLevel, turntableCells } from './turntable.js';
+
+// The rules of a run: the rack, placing tiles, playing words and scoring.
+// Nothing here touches the screen, so it is all tested in Node.
 
 export const RACK_SIZE = 7;
 export const BINGO = 50; // for using all seven tiles in one word, as in Scrabble
+const VOWELS = new Set('AEIOU');
 
 function createBag(seed) {
   const tiles = Object.entries(TILE_COUNTS).flatMap(([letter, count]) => Array(count).fill(letter));
   return shuffled(tiles, mulberry32(seed));
 }
 
+// A new run. The rack starts empty: letters are earned in the Hyperbolic
+// Chamber before each turn (see refillRack).
 export function createGame(level, board) {
   const letters = new Map();
   for (const word of level.words) {
@@ -24,32 +29,51 @@ export function createGame(level, board) {
     });
   }
 
-  // Bonus squares go on free slots, off the turntable so they stay put.
-  const turntable = turntableCells(level);
-  const bonuses = placeBonuses(
+  return {
     board,
-    level.seed,
-    (slot) => !letters.has(slot.key) && !turntable.has(slot.cell.join(',')),
-  );
-
-  const game = {
-    level,
-    quarters: 0, // quarter turns of the turntable so far
-    bonuses, // slot key -> 'DL' | 'TL' | 'DW' | 'TW'
-    letters, // slot key -> committed letter
+    bonuses: placeBonuses(board, level.seed, (slot) => !letters.has(slot.key)), // slot key -> 'DL' | 'TL' | 'DW' | 'TW'
+    letters, // slot key -> letter on the board
     pending: [], // tiles placed this turn: { slot, letter }
     rack: [],
     bag: createBag(level.seed),
     turnsLeft: level.turns,
     score: 0,
-    history: [], // every play, with the view it was made from
+    finished: false,
+    history: [], // every turn, with the view each word was played from
   };
-  refillRack(game);
-  return game;
 }
 
-function refillRack(game) {
-  while (game.rack.length < RACK_SIZE && game.bag.length) game.rack.push(game.bag.pop());
+// The run ends when turns run out, the player stops, or no tiles are left.
+export const isOver = (game) =>
+  game.finished || game.turnsLeft <= 0 || (!game.rack.length && !game.bag.length && !game.pending.length);
+
+// How much a rack would like this tile: vowels when it is short of them,
+// consonants when it has plenty, then high-scoring letters; a Q without a U
+// and duplicates count against.
+function usefulness(rack, letter) {
+  const vowels = rack.filter((l) => VOWELS.has(l)).length;
+  let score = LETTER_VALUES[letter];
+  if (VOWELS.has(letter)) score += vowels < 2 ? 12 : vowels >= 4 ? -12 : 0;
+  else if (vowels >= 4) score += 6;
+  if (letter === 'Q' && !rack.includes('U')) score -= 9;
+  if (rack.includes(letter)) score -= 4;
+  return score;
+}
+
+// Fills the rack up to seven tiles. Each new tile is the best of `picks`
+// drawn from the bag, so a better chamber score means better letters; the
+// tiles not taken go back to the bottom of the bag. Returns the new tiles.
+export function refillRack(game, picks = 1) {
+  const drawn = [];
+  while (game.rack.length < RACK_SIZE && game.bag.length) {
+    const options = game.bag.splice(-Math.min(picks, game.bag.length));
+    options.sort((a, b) => usefulness(game.rack, b) - usefulness(game.rack, a));
+    const [best, ...rest] = options;
+    game.rack.push(best);
+    drawn.push(best);
+    game.bag.unshift(...rest);
+  }
+  return drawn;
 }
 
 export function letterAt(game, key) {
@@ -57,7 +81,7 @@ export function letterAt(game, key) {
 }
 
 export function placeTile(game, key, rackIndex) {
-  if (letterAt(game, key)) return false;
+  if (letterAt(game, key) || rackIndex < 0 || rackIndex >= game.rack.length) return false;
   const [letter] = game.rack.splice(rackIndex, 1);
   game.pending.push({ slot: key, letter });
   return true;
@@ -78,77 +102,113 @@ export function cancelPending(game) {
   return slots;
 }
 
-// Commits this turn's tiles as a word along the chain, read from viewDir, if
-// isWord accepts it.
-export function playWord(game, chain, viewDir, isWord) {
+// Spends a turn sending the whole rack back to the bag, to be refilled in the
+// chamber. Returns false if tiles are on the board or no turns are left.
+export function swapRack(game) {
+  if (game.pending.length || game.turnsLeft <= 0 || !game.rack.length) return false;
+  game.bag.unshift(...game.rack);
+  game.rack = [];
+  game.history.push({ type: 'swap' });
+  game.turnsLeft--;
+  return true;
+}
+
+export function finishRun(game) {
+  cancelPending(game);
+  game.finished = true;
+}
+
+// Checks this turn's tiles against the rules, without changing anything:
+// they must form one word along the chain (read from viewDir), use a letter
+// already on the board, and any word they make sideways on the same face
+// counts too. Returns { error } or a play whose words still need checking
+// against the dictionary before commitPlay.
+export function preparePlay(game, chain, viewDir) {
   if (!game.pending.length) return { error: 'Place at least one tile first.' };
   if (game.pending.some((tile) => !chain.slots.includes(tile.slot))) {
     return { error: 'All your tiles must be on the selected line.' };
   }
 
-  let span;
+  let main;
   for (const line of unroll(game, chain)) {
-    span = findSpan(game, line);
-    if (!span.error) break;
+    main = findSpan(game, line);
+    if (!main.error) break;
   }
-  if (span.error) return span;
-  if (!isWord(span.word)) return { error: `${span.word} isn't in the dictionary.` };
+  if (main.error) return main;
 
+  const cross = game.pending.map((tile) => crossWord(game, chain, tile.slot, viewDir)).filter(Boolean);
+  if (!main.slots.some((key) => game.letters.has(key)) && !cross.length) {
+    return { error: 'Your word must use a letter already on the board.' };
+  }
+  return { viewDir, main, cross, words: [main.word, ...cross.map((word) => word.word)] };
+}
+
+// Commits a prepared play whose words were all accepted. Returns the score.
+export function commitPlay(game, play) {
   const placed = game.pending;
-  const points = scoreWord(game, span, placed);
+  const fresh = new Set(placed.map((tile) => tile.slot));
+  const main = scoreSlots(game, play.main.slots, fresh);
+  const cross = play.cross.map((word) => ({ word: word.word, ...scoreSlots(game, word.slots, fresh) }));
+  const bingo = placed.length === RACK_SIZE ? BINGO : 0;
+
+  const mainTotal = main.letters * main.wordMultiplier * play.main.surfaces;
+  const total = mainTotal + cross.reduce((sum, word) => sum + word.letters * word.wordMultiplier, 0) + bingo;
+  const points = {
+    letters: main.letters,
+    wordMultiplier: main.wordMultiplier,
+    surfaces: play.main.surfaces,
+    cross: cross.map((word) => ({ word: word.word, total: word.letters * word.wordMultiplier })),
+    bingo,
+    bonuses: [...main.bonuses, ...cross.flatMap((word) => word.bonuses)],
+    total,
+  };
+
   for (const tile of placed) game.letters.set(tile.slot, tile.letter);
   game.pending = [];
-  game.history.push({ type: 'word', view: viewDir, slots: span.slots, placed, word: span.word, points });
-  game.score += points.total;
+  game.history.push({ type: 'word', view: play.viewDir, word: play.main.word, slots: play.main.slots, placed, points });
+  game.score += total;
   game.turnsLeft--;
-  refillRack(game);
-  return { ...span, placed, points };
+  return { word: play.main.word, placed, points };
 }
 
-// The level as it stands, with the turntable turned.
-export const currentLevel = (game) => turnedLevel(game.level, game.quarters);
-
-// Spends a turn turning the turntable a quarter turn. Letters on it turn
-// with it. board is the board before the turn.
-export function turnTurntable(game, board) {
-  if (game.pending.length || game.turnsLeft <= 0) return false;
-  const level = currentLevel(game);
-  const cells = turntableCells(level);
-  const letters = new Map();
-  for (const [key, letter] of game.letters) {
-    const { cell, normal } = board.slots.get(key);
-    if (!cells.has(cell.join(','))) {
-      letters.set(key, letter);
-      continue;
-    }
-    const moved = turnOnce(level, cell, normal);
-    letters.set(slotKey(moved.cell, faceOf(moved.normal)), letter);
-  }
-  game.letters = letters;
-  game.quarters = (game.quarters + 1) % 4;
-  game.history.push({ type: 'turn' });
-  game.turnsLeft--;
-  return true;
-}
-
-// Scrabble scoring: letter values, with bonus squares counting only under
-// newly placed tiles. The total is then multiplied by the number of surfaces
-// the word spans, so a word joined across two strips scores double.
-function scoreWord(game, span, placed) {
-  const fresh = new Set(placed.map((tile) => tile.slot));
-  const covered = span.slots.filter((key) => fresh.has(key) && game.bonuses.has(key));
-  const used = covered.map((key) => game.bonuses.get(key));
-
+// Scrabble scoring for one word: letter values, with bonus squares counting
+// only under tiles placed this turn.
+function scoreSlots(game, slots, fresh) {
   let letters = 0;
   let wordMultiplier = 1;
-  for (const key of span.slots) {
-    const bonus = covered.includes(key) ? BONUS_KINDS[game.bonuses.get(key)] : null;
+  const bonuses = [];
+  for (const key of slots) {
+    const kind = fresh.has(key) ? game.bonuses.get(key) : null;
+    const bonus = kind ? BONUS_KINDS[kind] : null;
+    if (kind) bonuses.push(kind);
     letters += LETTER_VALUES[letterAt(game, key)] * (bonus?.letter ?? 1);
     wordMultiplier *= bonus?.word ?? 1;
   }
-  const bingo = placed.length === RACK_SIZE ? BINGO : 0;
-  const total = letters * wordMultiplier * span.surfaces + bingo;
-  return { letters, wordMultiplier, surfaces: span.surfaces, bingo, bonuses: used, total };
+  return { letters, wordMultiplier, bonuses };
+}
+
+// The word a new tile makes across the main line, on its own face: the run of
+// letters through it along the face's other axis, if longer than one.
+function crossWord(game, chain, key, viewDir) {
+  const { board } = game;
+  const slot = board.slots.get(key);
+  const i = chain.slots.indexOf(key);
+  const n = chain.slots.length;
+  const neighbours = [];
+  if (chain.cyclic || i > 0) neighbours.push(chain.slots[(i + n - 1) % n]);
+  if (chain.cyclic || i < n - 1) neighbours.push(chain.slots[(i + 1) % n]);
+  const along = slot.lines.find((id) => board.lines[id].slots.some((k) => neighbours.includes(k)));
+  const across = slot.lines.find((id) => id !== along);
+  if (along === undefined || across === undefined) return null;
+
+  const line = board.lines[across].slots;
+  let start = line.indexOf(key);
+  let end = start;
+  while (start > 0 && letterAt(game, line[start - 1])) start--;
+  while (end < line.length - 1 && letterAt(game, line[end + 1])) end++;
+  if (start === end) return null;
+  const slots = readingOrder(board, line.slice(start, end + 1), viewDir);
+  return { slots, word: slots.map((k) => letterAt(game, k)).join('') };
 }
 
 // A loop has no ends, so a word on it may run past any point. Cutting the

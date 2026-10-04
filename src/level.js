@@ -9,14 +9,50 @@ export const TILE_COUNTS = {
   N: 6, O: 8, P: 2, Q: 1, R: 6, S: 4, T: 6, U: 4, V: 2, W: 2, X: 1, Y: 2, Z: 1,
 };
 
-// Penrose stairs: a square ring of strips where each side is lifted along
-// (1, 1, 1). The lifts are invisible from the isometric viewpoint, so the ring
-// looks closed there and a word can run around it forever. From anywhere else
-// it is an open spiral: walk it one way and you climb a floor at three
-// corners, yet arrive back where you started. The fourth corner hides the
-// drop, the same cheat Penrose's drawing makes. These lifts are ones where no
-// side covers a tile of another from the isometric view.
-function penroseLoop(origin, size, lifts = [0, 3, 2, 1]) {
+// Monument Valley's palette: each part of the monument has its own colour.
+const SAND = '#f3cba5';
+const MINT = '#a7d8c9';
+const LAVENDER = '#b7a6db';
+const CORAL = '#f19a8e';
+
+const add = (a, b) => a.map((v, i) => v + b[i]);
+const times = (a, k) => a.map((v) => v * k);
+
+// A flat slab of blocks, as runs along x.
+function slab([x0, x1], y, [z0, z1], color) {
+  const runs = [];
+  for (let z = z0; z <= z1; z++) runs.push({ start: [x0, y, z], dir: [1, 0, 0], length: x1 - x0 + 1, color });
+  return runs;
+}
+
+// The four isometric views from above, named by where the camera stands.
+export const VIEWS = {
+  southEast: [1, 1, 1], // the home view
+  northEast: [1, 1, -1],
+  northWest: [-1, 1, -1],
+  southWest: [-1, 1, 1],
+};
+
+// An arm leaves the plaza's edge along dir: two blocks attached to the plaza,
+// then four more shifted one step along a view direction. A shift along the
+// view is invisible from that view, so the arm only looks whole, and its
+// lines only join up, from that one corner. From anywhere else it is a broken
+// bridge.
+function arm(edge, dir, view) {
+  const far = add(add(edge, times(dir, 2)), view);
+  return [
+    { start: edge, dir, length: 2, color: MINT },
+    { start: far, dir, length: 4, color: MINT },
+  ];
+}
+
+// Penrose stairs crowning the tower: a square ring whose sides are lifted
+// along the home view. The lifts are invisible from that view, so the ring
+// looks closed and a word can run round it forever; from anywhere else it is
+// an open staircase that climbs at three corners and still returns to where
+// it started. The first side rests on the tower, so the crown is part of the
+// monument. These lifts keep every tile visible from the home view.
+function penroseCrown(origin, size, lifts = [0, 3, 2, 1]) {
   const sides = [
     { from: [0, 0, 0], dir: [1, 0, 0], length: size },
     { from: [size - 1, 0, 1], dir: [0, 0, 1], length: size - 1 },
@@ -26,52 +62,44 @@ function penroseLoop(origin, size, lifts = [0, 3, 2, 1]) {
   const blocks = [];
   const path = [];
   sides.forEach(({ from, dir, length }, side) => {
-    const start = from.map((v, i) => origin[i] + v + lifts[side]);
-    blocks.push({ start, dir, length });
-    for (let i = 0; i < length; i++) path.push(start.map((v, j) => v + dir[j] * i));
+    const start = add(add(origin, from), times(VIEWS.southEast, lifts[side]));
+    blocks.push({ start, dir, length, color: CORAL });
+    for (let i = 0; i < length; i++) path.push(add(start, times(dir, i)));
   });
-  return { blocks, loop: { view: [1, 1, 1], face: '+y', path } };
+  return { blocks, loop: { view: VIEWS.southEast, face: '+y', path } };
 }
 
-const STAIRS = penroseLoop([-9, -4, 6], 5);
+const CROWN = penroseCrown([0, 7, 0], 4);
 
-// The broken cube. Blocks are listed as straight runs of unit cubes; every
-// exposed face of every block can hold a letter. Run `npm run vantages` to
-// list the viewpoints where lines join.
-//
-// The LOVE and ABLE ledges are far apart in 3D, but ABLE starts exactly one
-// isometric step (+3, +3, +3) past the end of LOVE, so from the (1, 1, 1)
-// viewpoint they read as one line: LOVEABLE. The floating ledges at the end
-// of the list are placed the same way against the main loop, each from a
-// different viewpoint.
-export const BROKEN_CUBE = {
-  id: 'broken-cube',
-  seed: 20251003,
+// The monument: a sand plaza with a lavender tower in the middle, the Penrose
+// crown on top, and four mint arms in a pinwheel. Each arm leaves the plaza on
+// the side facing its own view, so the tower never stands between that view
+// and the arm's line. Run `npm run vantages` to list where lines join.
+export const MONUMENT = {
+  id: 'monument',
+  seed: 20261004,
   turns: 12,
   blocks: [
-    { start: [0, -3, 0], dir: [1, 0, 0], length: 4 }, // LOVE ledge
-    { start: [7, 0, 3], dir: [1, 0, 0], length: 4 }, // ABLE ledge
-    { start: [0, 0, 1], dir: [0, 0, 1], length: 4 }, // rise
-    { start: [0, 1, 6], dir: [0, 1, 0], length: 5 }, // tower
-    { start: [1, 6, 6], dir: [1, 0, 0], length: 5 }, // top
-    { start: [6, 6, 5], dir: [0, 0, -1], length: 4 }, // back
-    { start: [6, 5, 0], dir: [0, -1, 0], length: 4 }, // drop
-    { start: [2, -2, 3], dir: [0, 0, 1], length: 4 }, // joins rise from (-1, 1, 1)
-    { start: [1, 1, -1], dir: [0, 0, -1], length: 4, turntable: true }, // joins rise from (1, 1, -1); turns
-    { start: [0, 3, 3], dir: [-1, 0, 0], length: 4 }, // joins top from (0, 1, 1)
-    { start: [6, 8, 4], dir: [1, 0, 0], length: 4 }, // joins top from (0, 1, -1)
-    ...STAIRS.blocks,
+    ...slab([-2, 2], 0, [-2, 2], SAND),
+    { start: [0, 1, 0], dir: [0, 1, 0], length: 6, color: LAVENDER },
+    ...CROWN.blocks,
+    ...arm([3, 0, 1], [1, 0, 0], VIEWS.southEast),
+    ...arm([1, 0, -3], [0, 0, -1], VIEWS.northEast),
+    ...arm([-3, 0, -1], [-1, 0, 0], VIEWS.northWest),
+    ...arm([-1, 0, 3], [0, 0, 1], VIEWS.southWest),
   ],
   // Closed rings of tiles, each seen as one from a single viewpoint.
-  loops: [STAIRS.loop],
-  // Letters already on the board. Each text runs from start along dir, on the
-  // given face of each block; spaces are left empty.
+  loops: [CROWN.loop],
+  // Letters already on the board: each text runs from start along dir, on
+  // the given face of each block, and spaces are left empty. Every joined line
+  // reads from the plaza out along its arm, so the far ends invite words that
+  // finish there: LOVE...ABLE, ...RISE, ...STAR, ...TION.
   words: [
-    { start: [0, -3, 0], dir: [1, 0, 0], face: '+y', text: 'LOVE' },
-    { start: [7, 0, 3], dir: [1, 0, 0], face: '+y', text: 'ABLE' },
-    { start: [0, 0, 1], dir: [0, 0, 1], face: '+y', text: 'R  E' },
-    { start: [0, 3, 6], dir: [0, 1, 0], face: '+z', text: 'N' },
-    { start: [6, 6, 5], dir: [0, 0, -1], face: '+y', text: 'S' },
-    { start: [6, 3, 0], dir: [0, 1, 0], face: '+z', text: 'T' },
+    { start: [1, 0, 1], dir: [1, 0, 0], face: '+y', text: 'LOVE' },
+    { start: [6, 1, 2], dir: [1, 0, 0], face: '+y', text: 'ABLE' },
+    { start: [2, 1, -6], dir: [0, 0, -1], face: '+y', text: 'RISE' },
+    { start: [-6, 1, -2], dir: [-1, 0, 0], face: '+y', text: 'STAR' },
+    { start: [-2, 1, 6], dir: [0, 0, 1], face: '+y', text: 'TION' },
+    { start: [2, 7, 0], dir: [1, 0, 0], face: '+y', text: 'O' },
   ],
 };

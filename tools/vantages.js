@@ -1,9 +1,9 @@
 // Lists every vantage point in a level and the lines that join there.
 // Usage: npm run vantages
 import { buildBoard, chainsForView, isJoined } from '../src/board.js';
-import { BROKEN_CUBE } from '../src/level.js';
+import { MONUMENT } from '../src/level.js';
 
-const board = buildBoard(BROKEN_CUBE);
+const board = buildBoard(MONUMENT);
 console.log(
   `${board.cells.length} blocks, ${board.slots.size} slots, ${board.lines.length} lines, ` +
     `${board.vantages.length} vantage points\n`,

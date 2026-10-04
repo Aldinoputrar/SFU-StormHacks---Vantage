@@ -1,0 +1,3 @@
+{
+  "rewrites": [{ "source": "/mw/:path*", "destination": "https://scrabble.merriam.com/:path*" }]
+}

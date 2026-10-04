@@ -5,18 +5,17 @@ import { LETTER_VALUES } from './level.js';
 const TILE_SIZE = 0.84;
 const HEIGHT = { empty: 0.02, fixed: 0.09, pending: 0.09 };
 const COLORS = {
-  stone: '#b9a7c9',
-  turntable: '#9fb7c9',
-  empty: '#cabbd7',
-  emptyEdge: '#a996bd',
-  emptySide: '#c2b2d0',
-  fixed: '#f6deb0',
-  fixedSide: '#e2c48e',
-  fixedInk: '#3b3346',
-  pending: '#fff4cc',
-  pendingSide: '#f0d98f',
+  stone: '#b9a7c9', // blocks whose run gives no colour
+  fixed: '#fff3dc',
+  fixedSide: '#e8cfa4',
+  fixedInk: '#4a3f57',
+  pending: '#fffbe9',
+  pendingSide: '#f2df9f',
   pendingInk: '#2b6c8a',
 };
+
+// Empty tiles are a pale inset of the block they sit on.
+const tint = (color, toward, amount) => `#${new THREE.Color(color).lerp(new THREE.Color(toward), amount).getHexString()}`;
 // Bonus squares, coloured as on a Scrabble board.
 const BONUS_COLORS = { DL: '#5ba4d6', TL: '#1f6f9f', DW: '#ec9c9c', TW: '#d1495b' };
 const GLOW = {
@@ -26,8 +25,8 @@ const GLOW = {
 };
 
 const textures = new Map();
-function faceTexture(style, letter, bonus) {
-  const key = `${style}:${letter}:${bonus ?? ''}`;
+function faceTexture(style, letter, bonus, stone) {
+  const key = `${style}:${letter}:${bonus ?? ''}:${style === 'empty' ? stone : ''}`;
   if (textures.has(key)) return textures.get(key);
 
   const size = 256;
@@ -44,9 +43,9 @@ function faceTexture(style, letter, bonus) {
     ctx.font = 'bold 112px system-ui, sans-serif';
     ctx.fillText(bonus, size / 2, size / 2 + 6);
   } else if (style === 'empty') {
-    ctx.fillStyle = COLORS.empty;
+    ctx.fillStyle = tint(stone, '#ffffff', 0.3);
     ctx.fillRect(0, 0, size, size);
-    ctx.strokeStyle = COLORS.emptyEdge;
+    ctx.strokeStyle = tint(stone, '#4a3f57', 0.18);
     ctx.lineWidth = 8;
     ctx.beginPath();
     ctx.roundRect(28, 28, size - 56, size - 56, 26);
@@ -70,35 +69,31 @@ function faceTexture(style, letter, bonus) {
   return texture;
 }
 
-const sideMaterials = {
-  empty: new THREE.MeshStandardMaterial({ color: COLORS.emptySide, roughness: 0.9 }),
-  fixed: new THREE.MeshStandardMaterial({ color: COLORS.fixedSide, roughness: 0.7 }),
-  pending: new THREE.MeshStandardMaterial({ color: COLORS.pendingSide, roughness: 0.7 }),
-};
+// Materials shared by colour.
+const materials = new Map();
+function material(color, roughness = 0.9) {
+  if (!materials.has(color)) materials.set(color, new THREE.MeshStandardMaterial({ color, roughness }));
+  return materials.get(color);
+}
+const sideMaterial = (style, stone) =>
+  style === 'empty' ? material(tint(stone, '#ffffff', 0.15)) : material(COLORS[`${style}Side`], 0.7);
 
 const vec = (a) => new THREE.Vector3(...a);
 
 // Draws the board: stone blocks with a tile on every exposed face.
 export class BoardView {
-  // turntable: { cells, pivot } for the part that can turn, drawn in its own
-  // colour so players can spot it.
-  constructor(board, scene, turntable = null, bonuses = new Map()) {
+  constructor(board, scene, bonuses = new Map()) {
     this.scene = scene;
     this.bonuses = bonuses; // slot key -> bonus kind, drawn on empty tiles
-    this.turntable = turntable;
-    this.spinning = []; // turntable meshes with their resting pose
     this.group = new THREE.Group();
     this.tiles = new Map();
     this.pickables = [];
     this.highlights = new Map();
 
     const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
-    const stone = new THREE.MeshStandardMaterial({ color: COLORS.stone, roughness: 0.95 });
-    const turntableStone = new THREE.MeshStandardMaterial({ color: COLORS.turntable, roughness: 0.95 });
-    const onTurntable = (cell) => Boolean(turntable?.cells.has(cell.join(',')));
+    this.stoneOf = (cell) => board.colors.get(cell.join(',')) ?? COLORS.stone;
     for (const cell of board.cells) {
-      const block = new THREE.Mesh(blockGeometry, onTurntable(cell) ? turntableStone : stone);
-      if (onTurntable(cell)) this.spinning.push(block);
+      const block = new THREE.Mesh(blockGeometry, material(this.stoneOf(cell), 0.95));
       block.position.set(...cell);
       block.userData.cell = cell;
       this.group.add(block);
@@ -116,7 +111,6 @@ export class BoardView {
       this.tiles.set(slot.key, tile);
       this.setTile(slot.key, '', 'empty');
       this.orient(tile, vec(slot.axes[0]));
-      if (onTurntable(slot.cell)) this.spinning.push(mesh);
       this.group.add(mesh);
       this.pickables.push(mesh);
     }
@@ -128,27 +122,15 @@ export class BoardView {
     this.scene.remove(this.group);
   }
 
-  // Turns the turntable's meshes by angle about the vertical axis through
-  // its pivot, for animating a quarter turn before the board is rebuilt.
-  spinTurntable(angle) {
-    const pivot = new THREE.Vector3(...this.turntable.pivot);
-    const spin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
-    for (const mesh of this.spinning) {
-      mesh.userData.rest ??= { position: mesh.position.clone(), quaternion: mesh.quaternion.clone() };
-      const { position, quaternion } = mesh.userData.rest;
-      mesh.position.copy(position).sub(pivot).applyQuaternion(spin).add(pivot);
-      mesh.quaternion.copy(spin).multiply(quaternion);
-    }
-  }
-
   setTile(key, letter, style) {
     const tile = this.tiles.get(key);
     if (tile.style === style && tile.letter === letter) return;
     tile.style = style;
     tile.letter = letter;
-    tile.face.map = faceTexture(style, letter, style === 'empty' ? this.bonuses.get(key) : null);
+    const stone = this.stoneOf(tile.slot.cell);
+    tile.face.map = faceTexture(style, letter, style === 'empty' ? this.bonuses.get(key) : null, stone);
     tile.face.needsUpdate = true;
-    for (const i of [0, 1, 3, 4, 5]) tile.materials[i] = sideMaterials[style];
+    for (const i of [0, 1, 3, 4, 5]) tile.materials[i] = sideMaterial(style, stone);
 
     const height = HEIGHT[style];
     const normal = vec(tile.slot.normal);

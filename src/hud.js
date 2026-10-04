@@ -25,30 +25,33 @@ function patternTile({ letter, pending, cursor, joint, bonus }) {
   return span;
 }
 
-export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal, onTurn }) {
+export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal, onSwap, onFinish }) {
   $('play').addEventListener('click', onPlay);
   $('undo').addEventListener('click', onUndo);
   $('cancel').addEventListener('click', onCancel);
   $('iso').addEventListener('click', onIso);
   $('reveal').addEventListener('click', onReveal);
-  $('turn').addEventListener('click', onTurn);
+  $('swap').addEventListener('click', onSwap);
+  $('finish').addEventListener('click', onFinish);
   $('rack').addEventListener('click', (event) => {
     const tile = event.target.closest('[data-index]');
     if (tile) onRack(Number(tile.dataset.index));
   });
 
   return {
-    render({ game, placing, canReveal, canTurn, headline, hint, pattern, message }) {
+    // busy: the chamber is open or words are being checked.
+    render({ game, placing, busy, over, canReveal, headline, hint, pattern, message }) {
       $('score').textContent = game.score;
       $('turns').textContent = game.turnsLeft;
       $('bag').textContent = game.bag.length;
       $('rack').replaceChildren(...game.rack.map(rackTile));
       $('rack').classList.toggle('idle', !placing);
-      $('play').disabled = !game.pending.length;
-      $('undo').disabled = !game.pending.length;
-      $('cancel').disabled = !placing;
-      $('reveal').disabled = !canReveal;
-      $('turn').disabled = !canTurn;
+      $('play').disabled = busy || !game.pending.length;
+      $('undo').disabled = busy || !game.pending.length;
+      $('cancel').disabled = busy || !placing;
+      $('reveal').disabled = busy || !canReveal;
+      $('swap').disabled = busy || over || placing || !game.rack.length;
+      $('finish').disabled = busy || over;
       $('headline').textContent = headline;
       $('hint').textContent = hint;
       $('pattern').hidden = !pattern;
