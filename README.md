@@ -14,7 +14,7 @@ A single-player word puzzle in two parts. In the **Hyperbolic Chamber** you earn
 
 ## The core idea
 
-The board itself hides opportunities. Two strips of tiles might be far apart in 3D space, but from one viewing angle they line up as a continuous word. ABLE sits on a floating arm, blocks away from the plaza; type LOVE on the plaza and, from the right angle, it runs on into ABLE as LOVEABLE (or T into TABLE, UN into UNABLE).
+The board itself hides opportunities. Two strips of tiles might be far apart in 3D space, but from one viewing angle they line up as a continuous word. ABLE sits on a floating arm, blocks away from the central structure; with LOVE on the base arm, from the right angle it runs on into ABLE as LOVEABLE (or T into TABLE, UN into UNABLE).
 
 An orthographic camera lets surfaces at different depths appear to touch without perspective foreshortening. What counts as adjacent depends on your viewpoint, so finding the right place to look is part of solving the puzzle.
 
@@ -22,10 +22,10 @@ Every face of every block can hold letters: tops, sides and undersides. Each fac
 
 ## The monument
 
-One connected monument: a sand plaza (a 5×5 Scrabble board on top), a lavender tower in the middle, a coral Penrose crown resting on the tower, and four mint arms in a pinwheel.
+One connected monument: a lavender tower in the middle, a coral Penrose crown resting on the tower, and four mint arms in a pinwheel.
 
-- **Four views, like Monument Valley's rotations.** Vantage points are the four isometric views from above. Each arm's far end is shifted one step along one of those view directions, so each arm only joins the plaza, and its words only connect, from one corner. From anywhere else it is a broken bridge.
-- **Hook words.** Lines read from the plaza out along each arm, and only the far ends hold letters: …ABLE (LOVEABLE, TABLE), …RISE (SUNRISE), …STAR (LODESTAR), …TION (MOTION). The start of each line is left empty, because a word already complete across the gap could never be extended.
+- **Four views, like Monument Valley's rotations.** Vantage points are the four isometric views from above. Each arm's far end is shifted one step along one of those view directions, so each arm only joins the structure, and its words only connect, from one corner. From anywhere else it is a broken bridge.
+- **Hook words.** Lines read out along each arm, with starting and ending words: LOVEABLE, SUNRISE, LODESTAR, MOTION.
 - **The Penrose crown.** Four strips around a square, each lifted a different amount along the home view (1, 1, 1). From that view the lifts vanish and the strips close into one ring of 12 tiles with no start and no end, so a word can run round a corner and past any point. Orbit away and it opens into a staircase that climbs at three corners yet returns to where it started. One side rests on the tower, so the crown is part of the monument.
 - **Reveal the trick** swings the camera away from a vantage point and back, with dashed bars across every hidden gap.
 - **The compass** (bottom right) maps every view direction from above: the centre is straight down, the ring is the horizon, the four dots are the vantage points and the orange dot is you. Click a dot to fly there.
@@ -134,7 +134,7 @@ npm install
 npm run dev
 ```
 
-Open the printed local URL and press **Play**. You start in the Hyperbolic Chamber; collect your letters, then press **Isometric view** to see the empty plaza row run straight into ABLE on its floating arm. Click the glowing tile just before A and type a T: TABLE scores twice, once for each surface. Or open **Explore the Hyperbolic Lab** and press **Walk a square for me**.
+Open the printed local URL and press **Play**. You start in the Hyperbolic Chamber; collect your letters, then press **Isometric view** to see LOVE on the base arm run straight into ABLE on its floating arm as LOVEABLE. Or open **Explore the Hyperbolic Lab** and press **Walk a square for me**.
 
 To check words with Merriam-Webster, the server must be able to reach `scrabble.merriam.com`. If it can't (offline, or a network that blocks the site), the game still works with the offline list.
 

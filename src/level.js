@@ -33,15 +33,15 @@ export const VIEWS = {
   southWest: [-1, 1, 1],
 };
 
-// An arm leaves the plaza's edge along dir: two blocks attached to the plaza,
+// An arm leaves the tower's base along dir: four blocks extending outwards,
 // then four more shifted one step along a view direction. A shift along the
 // view is invisible from that view, so the arm only looks whole, and its
 // lines only join up, from that one corner. From anywhere else it is a broken
 // bridge.
 function arm(edge, dir, view) {
-  const far = add(add(edge, times(dir, 2)), view);
+  const far = add(add(edge, times(dir, 4)), view);
   return [
-    { start: edge, dir, length: 2, color: MINT },
+    { start: edge, dir, length: 4, color: MINT },
     { start: far, dir, length: 4, color: MINT },
   ];
 }
@@ -71,33 +71,28 @@ function penroseCrown(origin, size, lifts = [0, 3, 2, 1]) {
 
 const CROWN = penroseCrown([0, 7, 0], 4);
 
-// The monument: a sand plaza with a lavender tower in the middle, the Penrose
-// crown on top, and four mint arms in a pinwheel. Each arm leaves the plaza on
-// the side facing its own view, so the tower never stands between that view
-// and the arm's line. Run `npm run vantages` to list where lines join.
+// The monument: a lavender tower in the middle, the Penrose crown on top,
+// and four mint arms in a pinwheel. Run `npm run vantages` to list where lines join.
 export const MONUMENT = {
   id: 'monument',
   seed: 20261004,
   turns: 12,
   blocks: [
-    ...slab([-2, 2], 0, [-2, 2], SAND),
-    { start: [0, 1, 0], dir: [0, 1, 0], length: 6, color: LAVENDER },
+    { start: [0, 0, 0], dir: [0, 1, 0], length: 7, color: LAVENDER },
     ...CROWN.blocks,
-    ...arm([3, 0, 1], [1, 0, 0], VIEWS.southEast),
-    ...arm([1, 0, -3], [0, 0, -1], VIEWS.northEast),
-    ...arm([-3, 0, -1], [-1, 0, 0], VIEWS.northWest),
-    ...arm([-1, 0, 3], [0, 0, 1], VIEWS.southWest),
+    ...arm([1, 0, 1], [1, 0, 0], VIEWS.southEast),
+    ...arm([1, 0, -1], [0, 0, -1], VIEWS.northEast),
+    ...arm([-1, 0, -1], [-1, 0, 0], VIEWS.northWest),
+    ...arm([-1, 0, 1], [0, 0, 1], VIEWS.southWest),
   ],
   // Closed rings of tiles, each seen as one from a single viewpoint.
   loops: [CROWN.loop],
   // Letters already on the board: each text runs from start along dir, on
   // the given face of each block, and spaces are left empty. Every joined line
-  // reads from the plaza out along its arm, and only the far end holds
-  // letters, so the player writes the start of a word on the plaza and, from
-  // the right corner, it runs on into the arm: (LOVE)ABLE, (T)ABLE, (SUN)RISE,
-  // (LODE)STAR, (MO)TION. A word already complete across the gap could never
-  // be extended, so the hooks are left open.
+  // reads from the plaza out along its arm, so the far ends invite words that
+  // finish there: LOVE...ABLE, ...RISE, ...STAR, ...TION.
   words: [
+    { start: [1, 0, 1], dir: [1, 0, 0], face: '+y', text: 'LOVE' },
     { start: [6, 1, 2], dir: [1, 0, 0], face: '+y', text: 'ABLE' },
     { start: [2, 1, -6], dir: [0, 0, -1], face: '+y', text: 'RISE' },
     { start: [-6, 1, -2], dir: [-1, 0, 0], face: '+y', text: 'STAR' },
