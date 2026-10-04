@@ -1,6 +1,6 @@
 # Vantage
 
-Scrabble, if the board were an impossible object.
+A word puzzle where perspective bends space and geometry changes the rules.
 
 ## What it is
 
@@ -123,7 +123,7 @@ The structure takes inspiration from Penrose stairs, Escher's Waterfall and Monu
 ## Stack
 
 - [Three.js](https://threejs.org/) for 3D graphics and the chamber's shader
-- The Web Audio API for every sound: calm background music with a warm chord and a slow pentatonic bell melody, synthesised in [`src/audio.js`](src/audio.js), so there are no audio files. Playback starts after an interaction; the sound button reports whether it has actually started.
+- A local calm soundtrack plays through the browser's standard audio player, independently of Web Audio game cues ([`src/audio.js`](src/audio.js)). Playback starts after an interaction, and the sound button follows the music player's actual state. The original 38-second loop is generated with [`tools/generate-music.mjs`](tools/generate-music.mjs).
 - Vite for development, builds and the dictionary proxy
 - Node's built-in test runner
 
@@ -156,6 +156,12 @@ npm run build     # production build in dist/
 - **Reveal the trick** shows the real 3D gaps behind the lines joined at the current vantage point.
 - **Swap** sends your letters back for new ones (uses a turn); **Finish** ends the run.
 
+### Taking a thumbnail
+
+Press **Thumbnail view** on the title screen or between turns. VANTAGE is spotlighted across seven existing tiles: VANT and AGE sit on separate strips and join from the home viewpoint. Drag to separate them and press **Join the word** to bring them together. Press **H** to hide the controls for a clean screenshot, and **Esc** to return. The playable board is restored when you leave.
+
+Open `/?thumbnail=1&clean=1` to go straight to the clean thumbnail view. No blocks are added.
+
 ## Where things live
 
 | File | What it does |
@@ -169,7 +175,7 @@ npm run build     # production build in dist/
 | [`src/disk.js`](src/disk.js) | The shared Poincaré disk renderer: tiling, geodesics and markers in one shader |
 | [`src/chamber.js`](src/chamber.js) | The Hyperbolic Chamber screen |
 | [`src/lab.js`](src/lab.js) | The Hyperbolic Lab: free walking, triangles, the square walk and holonomy |
-| [`src/audio.js`](src/audio.js) | Synthesised sound |
+| [`src/audio.js`](src/audio.js) | Local background music and synthesised game cues |
 | [`src/scene.js`](src/scene.js) | Drawing the monument and its tiles |
 | [`src/placement.js`](src/placement.js) | Which line a click picks first, and its direction on screen (Across, Down, Diagonal) |
 | [`src/hud.js`](src/hud.js), [`src/style.css`](src/style.css), [`index.html`](index.html) | The interface |

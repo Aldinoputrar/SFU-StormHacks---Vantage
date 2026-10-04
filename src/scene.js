@@ -3,7 +3,7 @@ import { faceOf, slotKey } from './board.js';
 import { LETTER_VALUES } from './level.js';
 
 const TILE_SIZE = 0.84;
-const HEIGHT = { empty: 0.02, fixed: 0.09, pending: 0.09 };
+const HEIGHT = { empty: 0.02, fixed: 0.09, pending: 0.09, featured: 0.12 };
 const COLORS = {
   stone: '#b9a7c9', // blocks whose run gives no colour
   fixed: '#fff3dc',
@@ -12,6 +12,9 @@ const COLORS = {
   pending: '#fffbe9',
   pendingSide: '#f2df9f',
   pendingInk: '#2b6c8a',
+  featured: '#fff2cd',
+  featuredSide: '#d5ab63',
+  featuredInk: '#3b3346',
 };
 
 // Empty tiles are a pale inset of the block they sit on.
@@ -19,6 +22,7 @@ const tint = (color, toward, amount) => `#${new THREE.Color(color).lerp(new THRE
 // Bonus squares, coloured as on a Scrabble board.
 const BONUS_COLORS = { DL: '#5ba4d6', TL: '#1f6f9f', DW: '#ec9c9c', TW: '#d1495b' };
 const GLOW = {
+  spotlight: { color: new THREE.Color('#ffcf80'), base: 0.16, pulse: 0, speed: 0 },
   selected: { color: new THREE.Color('#ffae00'), base: 0.32, pulse: 0, speed: 0 },
   cursor: { color: new THREE.Color('#ff8a00'), base: 0.55, pulse: 0.3, speed: 6 },
 };
@@ -52,6 +56,13 @@ function faceTexture(style, letter, bonus, stone) {
   } else {
     ctx.fillStyle = COLORS[style];
     ctx.fillRect(0, 0, size, size);
+    if (style === 'featured') {
+      ctx.strokeStyle = '#bd8b39';
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.roundRect(12, 12, size - 24, size - 24, 18);
+      ctx.stroke();
+    }
     ctx.fillStyle = COLORS[`${style}Ink`];
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -153,7 +164,7 @@ export class BoardView {
     tile.mesh.position.copy(vec(tile.slot.center)).addScaledVector(normal, height / 2);
   }
 
-  // kind: 'selected' | 'cursor'; tiles stay unlit until a line is selected.
+  // Spotlight is reserved for the thumbnail; playable lines glow after a click.
   setHighlights(highlights) {
     this.highlights = highlights;
     for (const [key, tile] of this.tiles) {

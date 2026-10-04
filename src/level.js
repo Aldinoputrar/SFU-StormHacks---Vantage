@@ -71,6 +71,16 @@ function penroseCrown(origin, size, lifts = [0, 3, 2, 1]) {
 
 const CROWN = penroseCrown([0, 7, 0], 4);
 
+// Reuse the home arm for a photograph: VANT and AGE are physically separate,
+// but their seven existing top faces meet from the home vantage point.
+export const THUMBNAIL_WORD = {
+  text: 'VANTAGE',
+  face: '+y',
+  view: VIEWS.southEast,
+  cells: [[1, 0, 1], [2, 0, 1], [3, 0, 1], [4, 0, 1], [6, 1, 2], [7, 1, 2], [8, 1, 2]],
+  blankCells: [[9, 1, 2]], // hide the final E of ABLE while photographing
+};
+
 // The monument: a lavender tower in the middle, the Penrose crown on top,
 // and four mint arms in a pinwheel. Run `npm run vantages` to list where lines join.
 export const MONUMENT = {

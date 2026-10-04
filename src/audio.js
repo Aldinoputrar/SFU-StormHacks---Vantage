@@ -1,9 +1,9 @@
-// Sound, synthesised with the Web Audio API so there are no files to load:
-// soft bell tones on a pentatonic scale, in the spirit of Monument Valley.
-// Browsers only allow audio after the player interacts, so nothing plays
-// until unlock() is called from a click or key press.
+// A local music loop uses the browser's standard media player. Game cues
+// use Web Audio independently, so a suspended synthesiser cannot silence
+// the background track. Both start from a click or key press.
 
 const STORAGE_KEY = 'vantage-muted';
+const MUSIC_URL = `${import.meta.env?.BASE_URL ?? '/'}audio/calm-background.wav`;
 // A major pentatonic scale from C5, so any run of notes sounds consonant.
 const SCALE = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.51, 1567.98, 1760];
 
@@ -18,44 +18,58 @@ function loadMuted() {
 export function createSound({ onChange = () => {} } = {}) {
   let ctx = null;
   let master = null;
-  let ambience = null;
-  let musicTimer = null;
-  let nextNote = 0;
-  let melodyIndex = 0;
   let muted = loadMuted();
-  let available = Boolean(window.AudioContext ?? window.webkitAudioContext);
+  const music = window.Audio ? new window.Audio(MUSIC_URL) : null;
+  let musicStart = null;
+  let cuesAvailable = Boolean(window.AudioContext ?? window.webkitAudioContext);
+  if (music) {
+    music.loop = true;
+    music.preload = 'auto';
+    music.volume = 0.6;
+    music.muted = muted;
+    for (const event of ['playing', 'pause', 'ended', 'error']) music.addEventListener(event, onChange);
+  }
 
-  async function unlock() {
-    if (!available) return false;
+  function playMusic() {
+    if (!music || muted) return Promise.resolve(false);
+    if (musicStart) return musicStart;
+    if (!music.paused && !music.ended) return Promise.resolve(true);
     try {
-      if (!ctx) {
-        const Context = window.AudioContext ?? window.webkitAudioContext;
-        ctx = new Context({ latencyHint: 'playback' });
-        master = ctx.createGain();
-        master.gain.value = muted ? 0 : 0.6;
-        master.connect(ctx.destination);
-        ctx.addEventListener('statechange', updatePlayback);
-        startPad();
-      }
-      // Chrome may create a suspended context even during the first gesture.
-      // Resume the new context too, and allow later gestures to retry.
-      if (ctx.state !== 'running') await ctx.resume();
-      updatePlayback();
-      return ctx.state === 'running';
+      // Call play before any await so Chrome sees the original user gesture.
+      musicStart = Promise.resolve(music.play()).then(() => true, () => false).finally(() => {
+        musicStart = null;
+        onChange();
+      });
+      return musicStart;
     } catch {
-      if (!ctx) available = false;
-      updatePlayback();
-      return false;
+      onChange();
+      return Promise.resolve(false);
     }
   }
 
-  function updatePlayback() {
-    if (ctx?.state === 'running' && !muted) startMusic();
-    else {
-      clearInterval(musicTimer);
-      musicTimer = null;
+  async function unlock() {
+    const musicReady = playMusic();
+    if (cuesAvailable) {
+      try {
+        if (!ctx) {
+          const Context = window.AudioContext ?? window.webkitAudioContext;
+          ctx = new Context({ latencyHint: 'playback' });
+          master = ctx.createGain();
+          master.gain.value = muted ? 0 : 0.6;
+          master.connect(ctx.destination);
+          ctx.addEventListener('statechange', onChange);
+        }
+        if (ctx.state !== 'running') {
+          // Music does not wait for a context whose resume may stay pending.
+          void ctx.resume().then(onChange, onChange);
+        }
+      } catch {
+        cuesAvailable = false;
+      }
     }
+    const musicPlaying = await musicReady;
     onChange();
+    return music ? musicPlaying : !muted && ctx?.state === 'running';
   }
 
   function setMuted(value) {
@@ -66,7 +80,12 @@ export function createSound({ onChange = () => {} } = {}) {
       // Storage can be refused; the setting then lasts for this visit.
     }
     if (master) master.gain.setTargetAtTime(muted ? 0 : 0.6, ctx.currentTime, 0.05);
-    updatePlayback();
+    if (music) {
+      music.muted = muted;
+      if (muted) music.pause();
+      else void playMusic();
+    }
+    onChange();
     return muted;
   }
 
@@ -119,73 +138,15 @@ export function createSound({ onChange = () => {} } = {}) {
     source.start(start);
   }
 
-  // A warm chord with a slow breath, audible under the sparse bell melody.
-  function startPad() {
-    const pad = ctx.createGain();
-    pad.gain.value = 0.09;
-    pad.connect(master);
-    for (const [freq, detune] of [
-      [130.81, -4],
-      [196, 3],
-      [261.63, 6],
-    ]) {
-      const osc = ctx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      osc.detune.value = detune;
-      const lfo = ctx.createOscillator();
-      const depth = ctx.createGain();
-      lfo.frequency.value = 0.07 + Math.random() * 0.05;
-      depth.gain.value = 0.15;
-      const voice = ctx.createGain();
-      voice.gain.value = 0.3;
-      lfo.connect(depth).connect(voice.gain);
-      osc.connect(voice).connect(pad);
-      osc.start();
-      lfo.start();
-    }
-
-    // A soft echo gives background bells space without clouding game cues.
-    ambience = ctx.createGain();
-    ambience.connect(master);
-    const delay = ctx.createDelay(1);
-    delay.delayTime.value = 0.45;
-    const feedback = ctx.createGain();
-    feedback.gain.value = 0.22;
-    const wet = ctx.createGain();
-    wet.gain.value = 0.25;
-    ambience.connect(delay).connect(wet).connect(master);
-    delay.connect(feedback).connect(delay);
-  }
-
-  // Schedule a little ahead on the audio clock so the melody stays smooth
-  // while the player orbits, visits the chamber, or opens the lab.
-  function startMusic() {
-    if (musicTimer !== null) return;
-    const melody = [0, 2, 4, 2, 1, 3, 2, null, 0, 2, 4, 5, 4, 3, 1, null];
-    nextNote = ctx.currentTime + 0.15;
-    const schedule = () => {
-      if (ctx.state !== 'running' || muted) return;
-      if (nextNote < ctx.currentTime) nextNote = ctx.currentTime + 0.15;
-      while (nextNote < ctx.currentTime + 0.8) {
-        const note = melody[melodyIndex++ % melody.length];
-        if (note !== null) bell(SCALE[note] / 2, nextNote - ctx.currentTime, 0.075, 2.8, ambience);
-        nextNote += 2.4;
-      }
-    };
-    musicTimer = setInterval(schedule, 250);
-    schedule();
-  }
-
   return {
     unlock,
     get muted() {
       return muted;
     },
     get playing() {
-      return !muted && ctx?.state === 'running';
+      return !muted && (music ? !music.paused && !music.ended && music.readyState >= 2 : ctx?.state === 'running');
     },
-    get available() { return available; },
+    get available() { return Boolean(music) || cuesAvailable; },
     setMuted,
     toggleMute: () => setMuted(!muted),
 

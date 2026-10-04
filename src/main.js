@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import wordsUrl from '../node_modules/word-list/words.txt?url';
 import { createSound } from './audio.js';
-import { buildBoard, chainsForView, isJoined, nearestVantage } from './board.js';
+import { buildBoard, chainsForView, isJoined, nearestVantage, slotKey } from './board.js';
 import { BONUS_KINDS } from './bonuses.js';
 import { normalize, screenBasis } from './geometry.js';
 import { createChamber } from './chamber.js';
@@ -23,7 +23,7 @@ import {
 } from './game.js';
 import { createHud } from './hud.js';
 import { createLab } from './lab.js';
-import { MONUMENT, VIEWS } from './level.js';
+import { MONUMENT, THUMBNAIL_WORD, VIEWS } from './level.js';
 import { placementDirection, placementOptions } from './placement.js';
 import { BoardView } from './scene.js';
 
@@ -74,6 +74,17 @@ scene.add(fill);
 const view = new BoardView(board, scene, game.bonuses);
 for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed');
 
+const thumbnailSlots = THUMBNAIL_WORD.cells.map((cell) => slotKey(cell, THUMBNAIL_WORD.face));
+const thumbnailBlankSlots = THUMBNAIL_WORD.blankCells.map((cell) => slotKey(cell, THUMBNAIL_WORD.face));
+const spotlightTarget = new THREE.Object3D();
+for (const key of thumbnailSlots) spotlightTarget.position.add(new THREE.Vector3(...board.slots.get(key).center));
+spotlightTarget.position.divideScalar(thumbnailSlots.length);
+const spotlight = new THREE.SpotLight('#ffe7b4', 65, 35, Math.PI / 5, 0.85);
+spotlight.position.copy(spotlightTarget.position).add(new THREE.Vector3(0, 8, 5));
+spotlight.target = spotlightTarget;
+spotlight.visible = false;
+scene.add(spotlight, spotlightTarget);
+
 const bounds = new THREE.Box3();
 for (const cell of board.cells) bounds.expandByPoint(new THREE.Vector3(...cell));
 const target = bounds.getCenter(new THREE.Vector3());
@@ -106,6 +117,7 @@ function resize() {
   camera.bottom = -height / 2;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (document.body.classList.contains('thumbnail-mode')) frameThumbnail(viewDir());
 }
 resize();
 window.addEventListener('resize', resize);
@@ -134,12 +146,14 @@ let selection = null; // { chain, cursor, clicked } while placing
 let lockedDir = null;
 let snap = null;
 let revealing = false; // showing how far apart joined strips really are
+let thumbnailMode = false;
+let thumbnailReturn = null;
 let message = null;
 let messageTimer;
 // The camera is moving, a screen is over the monument or words are being
 // checked.
 const busy = () =>
-  Boolean(snap || revealing) || labOpen || mode === 'intro' || mode === 'chamber' || mode === 'checking';
+  Boolean(snap || revealing) || thumbnailMode || labOpen || mode === 'intro' || mode === 'chamber' || mode === 'checking';
 const canLook = () => !busy() && (mode === 'explore' || mode === 'over');
 
 const hud = createHud({
@@ -185,12 +199,19 @@ let wasJoined = false;
 function refresh() {
   if (mode !== 'placing' && mode !== 'checking' && !revealing) current = chainsForView(board, viewDir(), undefined, true);
   view.orientLetters(camera);
+  if (thumbnailMode) {
+    // Keep the name's letters on one baseline as the two strips line up.
+    for (const key of thumbnailSlots) view.orient(view.tiles.get(key), new THREE.Vector3(1, 0, 0));
+  }
   // A chime as strips come together.
   const joinedNow = current.chains.some(isJoined);
   if (joinedNow && !wasJoined && (mode === 'explore' || mode === 'over') && !revealing) sound.snap();
   wasJoined = joinedNow;
 
   const highlights = new Map();
+  if (thumbnailMode) {
+    for (const key of thumbnailSlots) highlights.set(key, 'spotlight');
+  }
   if (selection) {
     for (const key of selection.chain.slots) highlights.set(key, 'selected');
     const cursor = selection.chain.slots[selection.cursor];
@@ -288,6 +309,7 @@ function renderHud() {
     message,
   });
   document.getElementById('lab-open').disabled = !canLook();
+  document.getElementById('thumbnail').disabled = !canLook();
 }
 
 // The compass: every view direction seen from above, the centre straight down
@@ -353,7 +375,7 @@ function stepSnap(now) {
   if (t === 1) {
     const { then } = snap;
     snap = null;
-    controls.enabled = (mode === 'explore' || mode === 'over') && !revealing;
+    controls.enabled = thumbnailMode || ((mode === 'explore' || mode === 'over') && !revealing);
     then?.();
   }
   refresh();
@@ -372,8 +394,66 @@ controls.addEventListener('change', () => {
   if (!snap) refresh();
 });
 controls.addEventListener('end', () => {
-  if (dragged && mode === 'explore') snapIfNear();
+  if (dragged && (thumbnailMode || mode === 'explore')) snapIfNear();
 });
+
+function frameThumbnail(dir = THUMBNAIL_WORD.view) {
+  const { right, up } = screenBasis(normalize(dir));
+  const rightVec = new THREE.Vector3(...right);
+  const upVec = new THREE.Vector3(...up);
+  const points = board.cells.flatMap((cell) => [-0.6, 0.6].flatMap((x) =>
+    [-0.6, 0.6].flatMap((y) => [-0.6, 0.6].map((z) => new THREE.Vector3(...cell).add(new THREE.Vector3(x, y, z)))),
+  ));
+  const horizontal = points.map((point) => point.dot(rightVec));
+  const vertical = points.map((point) => point.dot(upVec));
+  const left = Math.min(...horizontal), rightEdge = Math.max(...horizontal);
+  const bottom = Math.min(...vertical), top = Math.max(...vertical);
+  const offset = camera.position.clone().sub(controls.target);
+  controls.target.copy(target)
+    .addScaledVector(rightVec, (left + rightEdge) / 2 - target.dot(rightVec))
+    .addScaledVector(upVec, (bottom + top) / 2 - target.dot(upVec));
+  camera.position.copy(controls.target).add(offset);
+  camera.zoom = 0.82 * Math.min((camera.right - camera.left) / (rightEdge - left), (camera.top - camera.bottom) / (top - bottom));
+  camera.updateProjectionMatrix();
+}
+
+function enterThumbnail() {
+  if (thumbnailMode || snap || labOpen || (mode !== 'intro' && !canLook())) return;
+  thumbnailReturn = { position: camera.position.clone(), target: controls.target.clone(), zoom: camera.zoom };
+  thumbnailMode = true;
+  THUMBNAIL_WORD.text.split('').forEach((letter, i) => view.setTile(thumbnailSlots[i], letter, 'featured'));
+  for (const key of thumbnailBlankSlots) view.setTile(key, '', 'empty');
+  spotlight.visible = true;
+  document.body.classList.add('thumbnail-mode');
+  document.getElementById('thumbnail-toolbar').hidden = false;
+  frameThumbnail();
+  animateTo(THUMBNAIL_WORD.view);
+}
+
+function exitThumbnail() {
+  if (!thumbnailMode) return;
+  thumbnailMode = false;
+  snap = null;
+  spotlight.visible = false;
+  for (const key of [...thumbnailSlots, ...thumbnailBlankSlots]) {
+    const letter = letterAt(game, key);
+    view.setTile(key, letter, letter ? 'fixed' : 'empty');
+  }
+  camera.position.copy(thumbnailReturn.position);
+  controls.target.copy(thumbnailReturn.target);
+  camera.zoom = thumbnailReturn.zoom;
+  camera.updateProjectionMatrix();
+  document.body.classList.remove('thumbnail-mode', 'clean-thumbnail');
+  document.getElementById('thumbnail-toolbar').hidden = true;
+  controls.enabled = mode === 'explore' || mode === 'over';
+  controls.update();
+  refresh();
+}
+
+document.getElementById('thumbnail').addEventListener('click', enterThumbnail);
+document.getElementById('intro-thumbnail').addEventListener('click', enterThumbnail);
+document.getElementById('thumbnail-exit').addEventListener('click', exitThumbnail);
+document.getElementById('thumbnail-align').addEventListener('click', () => thumbnailMode && !snap && animateTo(THUMBNAIL_WORD.view));
 
 // The Hyperbolic Chamber fills the rack: the better the score there, the
 // better the letters (each new tile is the best of score + 1 draws).
@@ -658,7 +738,15 @@ renderer.domElement.addEventListener('pointerup', (event) => {
 });
 
 window.addEventListener('keydown', (event) => {
-  if (event.ctrlKey || event.metaKey || event.altKey || busy()) return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (thumbnailMode) {
+    if (event.key === 'Escape') exitThumbnail();
+    else if (event.key.toLowerCase() === 'h') document.body.classList.toggle('clean-thumbnail');
+    else return;
+    event.preventDefault();
+    return;
+  }
+  if (busy()) return;
   if (event.target.matches?.('input, textarea, select, [contenteditable="true"]')) return;
   // Enter still plays after clicking the word strip or rack; other buttons
   // keep their own Enter, and Space always presses the focused button.
@@ -781,7 +869,7 @@ renderer.setAnimationLoop((time) => {
   lastTime = time;
   // While another screen has the page, the monument behind it barely moves.
   if ((chamber.isOpen() || lab.isOpen()) && frame++ % 20) return;
-  if (mode === 'intro' && !labOpen) {
+  if (mode === 'intro' && !labOpen && !thumbnailMode) {
     // Orbit controls report the change, which refreshes the view.
     camera.position.sub(controls.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), INTRO_SPIN * dt).add(controls.target);
     controls.update();
@@ -797,6 +885,7 @@ if (import.meta.env.DEV) {
     game,
     selection: () => selection,
     highlights: () => [...view.highlights.keys()],
+    thumbnail: () => thumbnailMode,
     slotOnScreen(key) {
       const point = new THREE.Vector3(...board.slots.get(key).center).project(camera);
       return { x: ((point.x + 1) / 2) * window.innerWidth, y: ((1 - point.y) / 2) * window.innerHeight };
@@ -804,4 +893,10 @@ if (import.meta.env.DEV) {
     mode: () => mode,
     lookFrom: (dir) => animateTo(dir),
   };
+}
+
+const pageOptions = new URLSearchParams(window.location.search);
+if (pageOptions.get('thumbnail') === '1') {
+  enterThumbnail();
+  document.body.classList.toggle('clean-thumbnail', pageOptions.get('clean') === '1');
 }

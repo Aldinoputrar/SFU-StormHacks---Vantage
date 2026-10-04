@@ -56,7 +56,7 @@ Walk a loop with W A S D and come back to the star:
 
 ## 2:45 – Close (*Technical execution, Documentation*)
 
-> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. Seventy-four Node tests cover alignment, placement, audio, rules, the dictionary and the hyperbolic maths. The README explains every formula."
+> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. A local music loop plays through the browser's audio player, while game cues are synthesised. Node tests cover alignment, placement, thumbnails, audio, rules, the dictionary and the hyperbolic maths. The README explains every formula."
 
 ## Questions you might get
 

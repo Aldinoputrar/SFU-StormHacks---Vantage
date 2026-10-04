@@ -16,6 +16,7 @@
         <button id="iso" type="button">Isometric view</button>
         <button id="reveal" type="button" disabled>Reveal the trick</button>
         <button id="lab-open" type="button" title="Walk freely in hyperbolic space">Hyperbolic Lab</button>
+        <button id="thumbnail" type="button">Thumbnail view</button>
       </div>
     </header>
 
@@ -78,6 +79,7 @@
         <div class="intro-actions">
           <button id="intro-play" type="button" class="primary">Play</button>
           <button id="intro-lab" type="button">Explore the Hyperbolic Lab</button>
+          <button id="intro-thumbnail" type="button">Thumbnail view</button>
         </div>
         <p class="intro-foot">Best with sound · About 10 minutes · Words checked with Merriam-Webster's Scrabble dictionary</p>
       </div>
@@ -154,6 +156,11 @@
       </div>
     </section>
 
+    <div id="thumbnail-toolbar" hidden role="toolbar" aria-label="Thumbnail controls">
+      <span>Drag to separate VANTAGE · Press H to hide controls</span>
+      <button id="thumbnail-align" type="button">Join the word</button>
+      <button id="thumbnail-exit" type="button">Back <kbd>Esc</kbd></button>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
