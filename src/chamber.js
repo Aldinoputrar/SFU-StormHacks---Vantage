@@ -10,6 +10,7 @@ import {
   generateSquareRound,
   generateStraightRound,
   generateTriangleRound,
+  apply,
   normalized,
   polar,
   radiusDrawnAs,
@@ -188,9 +189,14 @@ export function createChamber({ sound } = {}) {
 
   function draw() {
     if (action) return drawAction();
-    if (!round) return;
     const ctx = overlay.getContext('2d');
     ctx.clearRect(0, 0, overlay.width, overlay.height);
+    if (!round) {
+      // Between rounds: only the player, while the world slides or turns.
+      disk.setSegments([]);
+      disk.setMarkers(player ? [{ at: player, radius: PLAYER_RADIUS, color: '#ffffff', style: 'player' }] : []);
+      return;
+    }
     if (round.kind === 'straight') drawStraight(ctx);
     else if (round.kind === 'triangle') drawTriangles();
     else if (round.kind === 'square') drawSquare(ctx);
@@ -210,10 +216,18 @@ export function createChamber({ sound } = {}) {
     action.draw(ctx, { width: box.width, height: box.height, scale }, (z) => disk.pixelOf(z, true));
   }
 
+  // Between rounds, with nothing on the floor but the player, the world is
+  // recentred so no round starts far from the centre (see disk.recentre).
+  function settle() {
+    const moved = disk.recentre();
+    if (moved && player) player = apply(moved, player);
+  }
+
   // Plays one action game; resolves to its stars.
   async function playAction(kind) {
     round = null;
     labels.replaceChildren();
+    settle();
     if (player) await slide(disk.toScreen(player), [0, 0]);
     action = createAction(kind, { disk, sound, status: (text) => (result.textContent = text) });
     prompt.textContent = action.prompt;
@@ -363,6 +377,9 @@ export function createChamber({ sound } = {}) {
   // round needs the player out towards the rim, and a square round needs
   // them at the centre, so the world first slides them there.
   async function startRound(index) {
+    round = null;
+    labels.replaceChildren();
+    settle();
     const spot = player ? disk.toScreen(player) : null;
     const kind = kinds[index];
     if (kind === 'triangle') {
@@ -370,8 +387,6 @@ export function createChamber({ sound } = {}) {
       round = { ...layout, kind, triangles: layout.triangles.map((points) => points.map(disk.toWorld)), goal: null };
     } else if (kind === 'square') {
       const layout = generateSquareRound(Math.random);
-      round = null;
-      labels.replaceChildren();
       if (spot) await slide(spot, [0, 0]);
       player = disk.toWorld([0, 0]);
       const options = layout.options.map(disk.toWorld);
@@ -386,8 +401,6 @@ export function createChamber({ sound } = {}) {
       };
     } else if (kind === 'straight') {
       const layout = generateStraightRound(Math.random);
-      round = null;
-      labels.replaceChildren();
       if (spot) await slide(spot, layout.player);
       const target = disk.toWorld(layout.target);
       round = {

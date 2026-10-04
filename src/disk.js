@@ -1,5 +1,17 @@
 import * as THREE from 'three';
-import { FLAT, HYPERBOLIC, IDENTITY, SPHERICAL, apply, invert, tilingMirror, toCentre } from './hyperbolic.js';
+import {
+  FLAT,
+  HYPERBOLIC,
+  IDENTITY,
+  SPHERICAL,
+  apply,
+  compose,
+  invert,
+  normalized,
+  recentre,
+  tilingMirror,
+  toCentre,
+} from './hyperbolic.js';
 
 // Draws a plane of constant curvature in a disk: the hyperbolic plane in the
 // Poincaré disk, the flat plane, or the sphere by stereographic projection
@@ -41,6 +53,7 @@ const fragmentShader = /* glsl */ `
   uniform vec2 uMirror;          // tiling mirror: circle (centre on the real axis, radius), or flat line x = uMirror.x
   uniform float uSides;
   uniform vec3 uTileA, uTileB, uEdge;
+  uniform float uFlip;           // 1 when recentring has swapped the two tile colours
 
   // Geodesic segments. Each starts at from (world) and, seen from there with
   // from slid to the centre, runs straight out to seen.
@@ -111,7 +124,7 @@ const fragmentShader = /* glsl */ `
       }
       crossings += 1.0;
     }
-    vec3 color = mod(crossings, 2.0) < 0.5 ? uTileA : uTileB;
+    vec3 color = mod(crossings + uFlip, 2.0) < 0.5 ? uTileA : uTileB;
     float edge = uK > -0.5 && uK < 0.5 ? abs(z.x - uMirror.x) : abs(length(z - centre) - uMirror.y);
     float edgeWidth = 0.008;
     float edgeAa = fwidth(edge) + 1e-5;
@@ -181,6 +194,7 @@ export function createDisk(canvas, { curvature = HYPERBOLIC } = {}) {
     uTileA: { value: new THREE.Vector3() },
     uTileB: { value: new THREE.Vector3() },
     uEdge: { value: new THREE.Vector3() },
+    uFlip: { value: 0 },
     uSegments: { value: 0 },
     uSegFrom: { value: Array.from({ length: MAX_SEGMENTS }, () => new THREE.Vector2()) },
     uSegSeen: { value: Array.from({ length: MAX_SEGMENTS }, () => new THREE.Vector2(0.1, 0)) },
@@ -213,6 +227,7 @@ export function createDisk(canvas, { curvature = HYPERBOLIC } = {}) {
     uniforms.uTileA.value.copy(rgb(palette.a));
     uniforms.uTileB.value.copy(rgb(palette.b));
     uniforms.uEdge.value.copy(rgb(palette.edge));
+    uniforms.uFlip.value = 0;
   }
   useCurvature(curvature);
 
@@ -231,6 +246,19 @@ export function createDisk(canvas, { curvature = HYPERBOLIC } = {}) {
     },
     toScreen: (z) => apply(view, z),
     toWorld: (z) => apply(invert(view), z),
+
+    // Keeps the numbers small on long walks (see recentre in hyperbolic.js):
+    // if the point at the centre of the screen has left the central tile,
+    // the world is shifted by a symmetry of the floor that brings it back.
+    // Returns that symmetry, which the caller must apply to every world
+    // point it holds, or null if nothing moved.
+    recentre() {
+      const moved = recentre(apply(invert(view), [0, 0]), SIDES, MEETING[K], K);
+      if (!moved) return null;
+      view = normalized(compose(view, invert(moved.map)));
+      if (moved.steps % 2) uniforms.uFlip.value = 1 - uniforms.uFlip.value;
+      return moved.map;
+    },
 
     resize() {
       const box = canvas.getBoundingClientRect();

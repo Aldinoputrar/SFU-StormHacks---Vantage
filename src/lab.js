@@ -4,14 +4,15 @@ import {
   HYPERBOLIC,
   IDENTITY,
   SPHERICAL,
+  apply,
   compose,
   distance,
   normalized,
   polar,
   radiusAt,
   stride,
+  toCentre,
   triangle,
-  turnAtCentre,
 } from './hyperbolic.js';
 
 // The Hyperbolic Lab: walk freely on the hyperbolic plane and find out what
@@ -25,7 +26,6 @@ import {
 //     (holonomy), which a north arrow painted at home makes visible.
 
 const SPEED = 1.4; // units of distance per second
-const HOME = [0, 0];
 const ARROW = 0.9; // the north arrow's length
 const PLAYER_RADIUS = 0.14;
 const CORNER_RADIUS = 0.11;
@@ -98,7 +98,11 @@ export function createLab({ sound } = {}) {
 
   let disk = null;
   let K = HYPERBOLIC;
-  let north = polar(radiusAt(ARROW, K), Math.PI / 2); // the arrow's tip
+  // Home and the tip of its north arrow, in world coordinates. They start at
+  // the centre, but the world is recentred on long walks (see disk.recentre),
+  // and they move with it.
+  let home = [0, 0];
+  let north = polar(radiusAt(ARROW, K), Math.PI / 2);
   let trail = []; // world positions the player has passed through
   let corners = []; // world positions of up to three triangle corners
   let walked = 0;
@@ -176,7 +180,6 @@ export function createLab({ sound } = {}) {
   function useGeometry(k) {
     K = k;
     disk.curvature = k;
-    north = polar(radiusAt(ARROW, k), Math.PI / 2);
     intro.textContent = GEOMETRIES[k].intro();
     for (const button of switches) button.setAttribute('aria-pressed', String(Number(button.dataset.curvature) === k));
     reset();
@@ -225,6 +228,14 @@ export function createLab({ sound } = {}) {
 
   function move(heading, length) {
     disk.view = normalized(compose(stride(heading, length, K), disk.view));
+    const moved = disk.recentre();
+    if (moved) {
+      const carry = (z) => apply(moved, z);
+      home = carry(home);
+      north = carry(north);
+      corners = corners.map(carry);
+      trail = trail.map(carry);
+    }
     walked += length;
     sinceHome += length;
     const here = player();
@@ -239,14 +250,24 @@ export function createLab({ sound } = {}) {
   // Coming home after a long enough walk closes a loop: the north arrow has
   // turned by the area the loop enclosed.
   function checkHome(here) {
-    const home = distance(here, HOME, K) < HOME_RADIUS;
-    if (home && !wasHome && sinceHome > LOOP_LENGTH && !script) {
-      lastLoop = { turn: turnAtCentre(disk.view) };
+    const atHome = distance(here, home, K) < HOME_RADIUS;
+    if (atHome && !wasHome && sinceHome > LOOP_LENGTH && !script) {
+      lastLoop = { turn: arrowTurn() };
       tick('loop');
       sound?.snap();
     }
-    if (!home && wasHome) sinceHome = 0;
-    wasHome = home;
+    if (!atHome && wasHome) sinceHome = 0;
+    wasHome = atHome;
+  }
+
+  // How far the north arrow has turned on screen from pointing straight up:
+  // the direction, at home, of the geodesic to the arrow's tip. Sliding home
+  // to the centre keeps directions there, so this is the angle of the tip as
+  // seen from home.
+  function arrowTurn() {
+    const seen = apply(toCentre(disk.toScreen(home), K), disk.toScreen(north));
+    const turn = Math.atan2(seen[1], seen[0]) - Math.PI / 2;
+    return Math.atan2(Math.sin(turn), Math.cos(turn));
   }
 
   function dropCorner(at) {
@@ -265,7 +286,7 @@ export function createLab({ sound } = {}) {
 
   function finishSquare() {
     script = null;
-    const gap = distance(player(), HOME, K);
+    const gap = distance(player(), home, K);
     status.textContent = GEOMETRIES[K].square(gap.toFixed(2));
     tick('square');
     if (gap < 0.01) sound?.right();
@@ -273,7 +294,10 @@ export function createLab({ sound } = {}) {
   }
 
   function reset() {
+    disk.curvature = K; // also resets the floor's colours after recentring
     disk.view = IDENTITY;
+    home = [0, 0];
+    north = polar(radiusAt(ARROW, K), Math.PI / 2);
     trail = [];
     corners = [];
     walked = 0;
@@ -293,13 +317,13 @@ export function createLab({ sound } = {}) {
   function draw() {
     const here = player();
     disk.setSegments([
-      { from: HOME, to: north, color: '#d1495b', dashed: false },
+      { from: home, to: north, color: '#d1495b', dashed: false },
       ...corners.flatMap((corner, i) =>
         corners.length === 3 ? [{ from: corner, to: corners[(i + 1) % 3], color: '#4a3f57', dashed: false }] : [],
       ),
     ]);
     disk.setMarkers([
-      { at: HOME, radius: 0.16, color: '#f4b942', style: 'star' },
+      { at: home, radius: 0.16, color: '#f4b942', style: 'star' },
       { at: north, radius: 0.07, color: '#d1495b' },
       ...corners.map((at, i) => ({ at, radius: CORNER_RADIUS, color: CORNER_COLORS[i] })),
       { at: here, radius: PLAYER_RADIUS, color: '#ffffff', style: 'player' },
@@ -345,10 +369,10 @@ export function createLab({ sound } = {}) {
   }
 
   function drawReadout(here) {
-    const fromHome = distance(here, HOME, K);
-    const home = fromHome < HOME_RADIUS;
+    const fromHome = distance(here, home, K);
+    const atHome = fromHome < HOME_RADIUS;
     const rows = [
-      ['From home', fromHome.toFixed(2)],
+      ['From home', Number.isFinite(fromHome) ? fromHome.toFixed(2) : 'very far'],
       ['Walked', walked.toFixed(1)],
     ];
     if (lastLoop) {
@@ -358,8 +382,8 @@ export function createLab({ sound } = {}) {
           ? ['…so it enclosed an area of', Math.abs(lastLoop.turn).toFixed(2)]
           : ['Flat space has no curvature', 'so loops never turn it'],
       );
-    } else if (home) {
-      rows.push(['North arrow', signedDegrees(turnAtCentre(disk.view))]);
+    } else if (atHome) {
+      rows.push(['North arrow', signedDegrees(arrowTurn())]);
     }
     const html = rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
     if (readout.innerHTML !== html) readout.innerHTML = html;

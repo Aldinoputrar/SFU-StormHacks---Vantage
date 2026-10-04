@@ -349,3 +349,39 @@ export function bounce(wall, z, heading) {
     : Math.atan2(z[1] - wall.centre[1], z[0] - wall.centre[0]) + Math.PI / 2;
   return 2 * tangent - heading;
 }
+
+// Keeping numbers small on long walks. Far from the centre a point's
+// coordinates crowd against the rim (1 - |z| falls like e^-distance), and
+// after a dozen units a graphics card's 32-bit floats can no longer tell
+// them apart. The cure is to move the world, not the walker: whenever the
+// walker leaves the central tile, shift everything by a symmetry of the
+// tiling that brings them back into it. The floor looks exactly the same,
+// because it is a symmetry, and nothing ever gets far from the centre.
+//
+// The symmetries used are turns of 2π/p about the centre and the half turn
+// about the midpoint of the central tile's edge, which swaps the tile with
+// its neighbour. Each half turn brings the point strictly nearer the centre,
+// so the walk back always ends. Returns { map, steps } with map(point) inside
+// the central tile, or null if it already is. A half turn swaps the two tile
+// colours, so an odd number of steps flips them.
+export function recentre(point, p, q, K = HYPERBOLIC) {
+  if (K > 0) return null; // the sphere is small enough already
+  const mirror = tilingMirror(p, q, K);
+  const s = K ? mirror.centre - mirror.radius : mirror.line; // the edge's midpoint, on the real axis
+  const beyond = (z) => (K ? abs2(sub(z, [mirror.centre, 0])) < mirror.radius ** 2 : z[0] > s);
+  const halfTurn = compose(invert(toCentre([s, 0], K)), compose(rotation(Math.PI), toCentre([s, 0], K)));
+  let map = IDENTITY;
+  let at = point;
+  let steps = 0;
+  for (; steps < 2000; steps++) {
+    let side = -1;
+    for (let k = 0; k < p && side < 0; k++) {
+      if (beyond(apply(rotation((-k * 2 * Math.PI) / p), at))) side = k;
+    }
+    if (side < 0) break;
+    const step = compose(halfTurn, rotation((-side * 2 * Math.PI) / p));
+    map = normalized(compose(step, map));
+    at = apply(step, at);
+  }
+  return steps ? { map, steps } : null;
+}

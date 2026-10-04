@@ -1,5 +1,6 @@
 import {
   abs,
+  apply,
   arcThrough,
   bounce,
   compose,
@@ -71,8 +72,10 @@ function walker(disk) {
       else held.delete(heading);
       return true;
     },
-    // Moves the world so the player walks for dt seconds; returns whether they moved.
-    step(dt) {
+    // Moves the world so the player walks for dt seconds. If the world was
+    // recentred on the way, calls carry with the symmetry applied, so the
+    // game can move its own points along.
+    step(dt, carry) {
       let heading = null;
       if (pointer && Math.hypot(...pointer) > 0.06) heading = Math.atan2(pointer[1], pointer[0]);
       else if (held.size) {
@@ -86,6 +89,8 @@ function walker(disk) {
       }
       if (heading === null) return false;
       disk.view = normalized(compose(stride(heading, WALK_SPEED * dt), disk.view));
+      const moved = disk.recentre?.();
+      if (moved) carry?.((z) => apply(moved, z));
       return true;
     },
     stop() {
@@ -136,7 +141,7 @@ function dash({ disk, sound, status, random = Math.random }) {
     update(dt) {
       if (over) return;
       left -= dt;
-      walk.step(dt);
+      walk.step(dt, (move) => crystals.forEach((crystal) => (crystal.at = move(crystal.at))));
       const here = disk.toWorld([0, 0]);
       for (let i = crystals.length - 1; i >= 0; i--) {
         if (distance(here, crystals[i].at) > 0.32) continue;
@@ -203,7 +208,7 @@ function swarm({ disk, sound, status, random = Math.random }) {
       if (over) return;
       left -= dt;
       nextSpawn -= dt;
-      walk.step(dt);
+      walk.step(dt, (move) => shadows.forEach((at, i) => (shadows[i] = move(at))));
       const here = disk.toWorld([0, 0]);
       if (nextSpawn <= 0 && shadows.length < 7) {
         shadows.push(around(disk, 2.4 + 0.4 * random(), random));

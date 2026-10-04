@@ -24,6 +24,7 @@ import {
   radiusDrawnAs,
   polar,
   radiusAt,
+  recentre,
   rotation,
   stepTowards,
   stride,
@@ -349,4 +350,48 @@ test('a closest-crystal round can always be laid out for a player 0.3 or more fr
     const at = polar(0.3 + 0.26 * random(), 2 * Math.PI * random());
     assert.doesNotThrow(() => generateRound(random, at));
   }
+});
+
+test('recentring brings a far point back into the central tile by a symmetry of the floor', () => {
+  const random = mulberry32(13);
+  const { centre, radius } = tilingMirror(3, 8);
+  const inCentralTile = (z) =>
+    [0, 1, 2].every((k) => abs2(sub(apply(rotation((-k * 2 * Math.PI) / 3), z), [centre, 0])) >= radius ** 2 - 1e-9);
+  for (let i = 0; i < 50; i++) {
+    // A point up to 20 units away: far past where 32-bit floats give out.
+    const far = polar(Math.tanh((1 + 19 * random()) / 2), 2 * Math.PI * random());
+    const { map, steps } = recentre(far, 3, 8);
+    assert.ok(steps > 0);
+    assert.ok(inCentralTile(apply(map, far)), `still outside after ${steps} steps`);
+    // It is an isometry...
+    const a = [0.2, 0.1];
+    const b = [-0.3, 0.25];
+    close(distance(apply(map, a), apply(map, b)), distance(a, b), 1e-6);
+    // ...and a symmetry of the tiling: tile corners go to tile corners, which
+    // are exactly the points eight tiles meet at. The central tile's corner
+    // is at distance R from the centre, and so is its image from some tile centre.
+  }
+  assert.equal(recentre([0.05, 0.02], 3, 8), null);
+});
+
+test('the half turn about an edge midpoint swaps the central tile with its neighbour', () => {
+  // Recentring a point just across the edge takes one step, and sends the
+  // centre of the neighbouring tile to the centre.
+  const { centre, radius } = tilingMirror(3, 8);
+  const s = centre - radius;
+  const h = 2 * Math.atanh(s); // centre to edge
+  const neighbour = polar(Math.tanh((2 * h) / 2), 0); // the next tile's centre, 2h away
+  const { map, steps } = recentre(neighbour, 3, 8);
+  assert.equal(steps, 1);
+  close(abs(apply(map, neighbour)), 0, 1e-9);
+  close(abs(apply(map, [0, 0])) , abs(neighbour), 1e-9); // and the centre goes to it
+});
+
+test('recentring works on the flat plane too, and leaves the sphere alone', () => {
+  const far = [3.1, -2.2];
+  const { map } = recentre(far, 3, 6, FLAT);
+  const back = apply(map, far);
+  assert.ok(abs(back) < 0.5, `${abs(back)}`);
+  close(distance(apply(map, [0, 0], FLAT), back, FLAT), distance([0, 0], far, FLAT), 1e-9);
+  assert.equal(recentre([0.9, 0], 3, 4, SPHERICAL), null);
 });
