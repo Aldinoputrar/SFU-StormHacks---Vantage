@@ -29,7 +29,17 @@ const GLOW = {
   cursor: { color: new THREE.Color('#ff8a00'), base: 0.55, pulse: 0.3, speed: 6 },
 };
 
+// The interface's display font, with fallbacks until it has loaded.
+const FONT = '"Josefin Sans Variable", "Avenir Next", system-ui, sans-serif';
+
 const textures = new Map();
+
+// Drops every drawn face, so they are drawn afresh: used once the display
+// font has loaded, since faces drawn before then used a fallback.
+export function forgetTextures() {
+  for (const texture of textures.values()) texture.dispose();
+  textures.clear();
+}
 function faceTexture(style, letter, bonus, stone) {
   const key = `${style}:${letter}:${bonus ?? ''}:${style === 'empty' ? stone : ''}`;
   if (textures.has(key)) return textures.get(key);
@@ -45,8 +55,8 @@ function faceTexture(style, letter, bonus, stone) {
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 112px system-ui, sans-serif';
-    ctx.fillText(bonus, size / 2, size / 2 + 6);
+    ctx.font = `700 108px ${FONT}`;
+    ctx.fillText(bonus, size / 2, size / 2 + 12);
   } else if (style === 'empty') {
     ctx.fillStyle = tint(stone, '#ffffff', 0.3);
     ctx.fillRect(0, 0, size, size);
@@ -61,10 +71,10 @@ function faceTexture(style, letter, bonus, stone) {
     ctx.fillStyle = COLORS[`${style}Ink`];
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 150px system-ui, sans-serif';
-    ctx.fillText(letter, size / 2, size / 2 + 8);
-    ctx.font = 'bold 46px system-ui, sans-serif';
-    ctx.fillText(String(LETTER_VALUES[letter] ?? ''), size - 42, size - 38);
+    ctx.font = `700 156px ${FONT}`;
+    ctx.fillText(letter, size / 2, size / 2 + 18);
+    ctx.font = `700 46px ${FONT}`;
+    ctx.fillText(String(LETTER_VALUES[letter] ?? ''), size - 42, size - 34);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -185,6 +195,16 @@ export class BoardView {
     for (const { mesh, position, quaternion } of this.swinging) {
       mesh.position.copy(position).sub(centre).applyQuaternion(turn).add(centre);
       mesh.quaternion.copy(turn).multiply(quaternion);
+    }
+  }
+
+  // Draws every tile's face again (see forgetTextures).
+  redraw() {
+    for (const [key, tile] of this.tiles) {
+      const { letter, style } = tile;
+      tile.style = null;
+      this.setTile(key, letter, style);
+      if (style === 'pending') this.pops.delete(key);
     }
   }
 

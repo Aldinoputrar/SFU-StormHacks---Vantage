@@ -1,26 +1,51 @@
+/* Vantage's interface: soft pastel panels floating over a dawn sky, in the
+   spirit of Monument Valley. Sections: tokens, base, the HUD round the
+   monument, full-screen cards (title, chamber, lab, handoff, summary), and
+   the rules for small screens and reduced motion. */
+
+/* ---------- Tokens ---------- */
+
 :root {
   --ink: #3b3346;
-  --muted: #7a6f86;
-  --panel: rgba(255, 250, 243, 0.92);
-  --line: #d9cfe0;
-  --tile: #f6deb0;
-  --tile-side: #e2c48e;
+  --muted: #7d7289;
+  --line: #e4d9e6;
+  --panel: rgba(255, 251, 246, 0.84);
+  --card: #fffaf5;
+  --tile: #f7e2b8;
+  --tile-side: #e0c189;
   --pending: #fff4cc;
   --pending-ink: #2b6c8a;
   --aligned: #1fbfae;
   --accent: #ff8a00;
+  --coral: #e8735f;
   --error: #b5434a;
   --success: #2f8a5b;
+
+  --display: 'Josefin Sans Variable', 'Avenir Next', 'Century Gothic', system-ui, sans-serif;
+  --body: 'Nunito Variable', 'Avenir Next', system-ui, sans-serif;
+
+  --radius: 14px;
+  --radius-small: 9px;
+  --shadow: 0 10px 30px rgba(74, 63, 87, 0.14), 0 2px 6px rgba(74, 63, 87, 0.08);
+  --shadow-card: 0 24px 60px rgba(74, 63, 87, 0.28), 0 4px 12px rgba(74, 63, 87, 0.1);
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
+/* ---------- Base ---------- */
 
 html,
 body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: linear-gradient(180deg, #fde8dc 0%, #f8d9dc 55%, #efcbd6 100%) fixed;
   color: var(--ink);
-  font-family: system-ui, sans-serif;
+  font-family: var(--body);
+  font-size: 14px;
+  /* A dawn sky: a low sun glowing through peach into dusky rose. */
+  background:
+    radial-gradient(900px 520px at 78% 8%, rgba(255, 244, 214, 0.9), transparent 62%),
+    radial-gradient(1100px 700px at 12% 96%, rgba(199, 176, 226, 0.5), transparent 60%),
+    linear-gradient(180deg, #fde9dc 0%, #f9dadb 52%, #ecc6d6 100%) fixed;
 }
 
 canvas {
@@ -28,106 +53,301 @@ canvas {
   touch-action: none;
 }
 
-button {
-  font: inherit;
-  font-size: 13px;
-  padding: 6px 12px;
-  border: 1px solid var(--ink);
-  border-radius: 6px;
-  background: #fffaf3;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
 [hidden] {
   display: none !important;
 }
 
-button:focus-visible {
+h1,
+h2,
+h3 {
+  font-family: var(--display);
+}
+
+button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(74, 63, 87, 0.08);
+  transition:
+    transform 0.15s var(--ease),
+    box-shadow 0.15s var(--ease),
+    background 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #cdbfd3;
+  box-shadow: 0 4px 10px rgba(74, 63, 87, 0.14);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+button:disabled {
+  opacity: 0.42;
+  cursor: default;
+  box-shadow: none;
+}
+
+button:focus-visible,
+input:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline-offset: 2px;
+}
+
+/* The one button that matters most on a screen, and quiet text-only ones. */
+button.primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(59, 51, 70, 0.3);
+}
+
+button.primary:hover:not(:disabled) {
+  background: #4b4159;
+  border-color: #4b4159;
+  box-shadow: 0 8px 18px rgba(59, 51, 70, 0.34);
+}
+
+button.link {
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+button.link:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+  color: var(--ink);
+}
+
+/* A gentle pulse on the button a new player should press next. */
+button.nudge {
+  border-color: var(--accent);
+  animation: nudge 1.4s ease-in-out infinite;
+}
+
+@keyframes nudge {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 138, 0, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 138, 0, 0);
+  }
+}
+
+input[type='text'] {
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: #ffffff;
+  color: var(--ink);
 }
 
 kbd {
   font: inherit;
-  font-size: 11px;
-  opacity: 0.6;
-  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(74, 63, 87, 0.08);
+  color: var(--muted);
+}
+
+/* Small capital labels above groups of things. */
+#stats dt,
+#missions h2,
+.intro-setup h3,
+.summary-heading,
+.lab-panel h3,
+#lab-readout dt,
+#summary-stats dt,
+.handoff-label,
+#compass span {
+  font-family: var(--body);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+/* ---------- The HUD round the monument ---------- */
+
+/* Panels float on frosted glass, so the sky shows through. */
+#status,
+#stats > div,
+#missions,
+#tray,
+.standings li,
+#mute {
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px) saturate(1.1);
 }
 
 #title {
   position: fixed;
-  top: 16px;
-  left: 16px;
+  top: 18px;
+  left: 20px;
 }
 
 #title h1 {
   margin: 0;
-  font-size: 22px;
-  letter-spacing: 0.2em;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.34em;
   text-transform: uppercase;
+  line-height: 1;
 }
 
 #title p {
-  margin: 4px 0 10px;
-  font-size: 13px;
+  margin: 6px 0 12px;
+  font-size: 12px;
   color: var(--muted);
 }
 
+/* Kept narrow enough to clear the status panel in the middle, so the
+   buttons sit in two rows and the missions panel goes beneath them. */
 #view-buttons {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-width: calc(100vw - 200px);
+  max-width: min(400px, calc(100vw - 240px));
+}
+
+#view-buttons button {
+  padding: 6px 11px;
+  font-size: 12.5px;
+}
+
+/* The swing bridge's button wears the bridge's blue. */
+#swing {
+  border-color: #9cc9ec;
+  color: #2a6a9e;
 }
 
 #stats {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: 18px;
+  right: 20px;
   display: flex;
   gap: 8px;
   margin: 0;
 }
 
 #stats > div {
-  min-width: 56px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
+  min-width: 62px;
+  padding: 7px 10px 5px;
+  border-radius: var(--radius-small);
   text-align: center;
 }
 
-#stats dt {
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+#stats dd {
+  margin: 1px 0 0;
+  font-family: var(--display);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
-#stats dd {
+#score.bump {
+  animation: score-bump 0.5s ease-out;
+}
+
+@keyframes score-bump {
+  40% {
+    transform: scale(1.3);
+    color: var(--accent);
+  }
+}
+
+#mute {
+  align-self: center;
+  font-size: 11px;
+  padding: 6px 9px;
+}
+
+#mute[aria-pressed='true'] {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* Who is playing: every player's score, the one whose turn it is marked. */
+.standings {
   margin: 0;
-  font-size: 20px;
-  font-weight: 700;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.standings li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 11px;
+  border-radius: var(--radius-small);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.standings li.active {
+  border-color: var(--accent);
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    var(--shadow);
+  font-weight: 800;
+}
+
+.standings li.winner {
+  background: var(--pending);
+  font-weight: 800;
+}
+
+.standings .score {
   font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+#players {
+  position: fixed;
+  top: 92px;
+  right: 20px;
+  width: 190px;
 }
 
 #status {
   position: fixed;
-  top: 16px;
+  top: 18px;
   left: 50%;
   transform: translateX(-50%);
-  max-width: min(440px, calc(100vw - 32px));
-  padding: 10px 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
+  max-width: min(460px, calc(100vw - 32px));
+  padding: 11px 18px;
+  border-radius: var(--radius);
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -137,11 +357,15 @@ kbd {
 }
 
 #headline {
-  font-size: 15px;
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 #hint {
   font-size: 12px;
+  line-height: 1.4;
   color: var(--muted);
 }
 
@@ -151,7 +375,7 @@ kbd {
 
 #message {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 800;
 }
 
 #message.error {
@@ -162,6 +386,7 @@ kbd {
   color: var(--success);
 }
 
+/* The word strip: the chosen line's squares, in reading order. */
 #pattern {
   display: flex;
   flex-wrap: wrap;
@@ -175,34 +400,21 @@ kbd {
   width: 30px;
   height: 30px;
   padding: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   border: 1px solid var(--line);
-  background: #ece4f0;
-  font-size: 13px;
-  font-weight: 700;
+  background: #efe7f2;
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 800;
   line-height: 28px;
   text-align: center;
-}
-
-#pattern .covered::after {
-  content: '';
-  position: absolute;
-  bottom: 2px;
-  left: 5px;
-  right: 5px;
-  border-bottom: 2px dashed currentColor;
-  opacity: 0.65;
-}
-
-#switch-line {
-  pointer-events: auto;
-  font-size: 12px;
-  padding: 4px 10px;
 }
 
 #pattern .letter {
   background: var(--tile);
   border-color: var(--tile-side);
+  border-bottom-width: 3px;
+  line-height: 26px;
 }
 
 #pattern .pending {
@@ -237,12 +449,157 @@ kbd {
 }
 
 #pattern .joint {
-  margin-left: 8px;
+  margin-left: 9px;
 }
 
+#pattern .covered::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 5px;
+  right: 5px;
+  border-bottom: 2px dashed currentColor;
+  opacity: 0.65;
+}
+
+#switch-line {
+  pointer-events: auto;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+/* Missions: three goals for the run. */
+#missions {
+  position: fixed;
+  left: 20px;
+  top: 164px;
+  width: 232px;
+  padding: 11px 13px;
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+#missions h2 {
+  margin: 0 0 7px;
+}
+
+#mission-list,
+#summary-missions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+#mission-list li,
+#summary-missions li {
+  position: relative;
+  padding-left: 23px;
+  line-height: 1.35;
+}
+
+#mission-list li::before,
+#summary-missions li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid #b6a9bf;
+  border-radius: 4px;
+}
+
+#mission-list li.done,
+#summary-missions li.done {
+  color: var(--success);
+  font-weight: 700;
+}
+
+#mission-list li.done::before,
+#summary-missions li.done::before {
+  content: '✓';
+  border-color: var(--success);
+  background: var(--success);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 13px;
+  text-align: center;
+}
+
+#mission-list li.just {
+  animation: mission-done 0.9s ease-out;
+}
+
+@keyframes mission-done {
+  30% {
+    transform: scale(1.06);
+    background: var(--pending);
+  }
+}
+
+/* The compass maps every view direction from above: the ring is the horizon,
+   the centre is straight down. Vantage points are the four dots; you are the
+   orange one. */
+#compass {
+  position: fixed;
+  right: 20px;
+  bottom: 96px;
+  width: 96px;
+  text-align: center;
+}
+
+#compass svg {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 3px;
+  overflow: visible;
+  filter: drop-shadow(0 6px 12px rgba(74, 63, 87, 0.16));
+}
+
+#compass .ring {
+  fill: var(--panel);
+  stroke: #ffffff;
+  stroke-width: 1.5;
+}
+
+#compass .vantage {
+  fill: #ffffff;
+  stroke: var(--aligned);
+  stroke-width: 2.5;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    r 0.2s,
+    fill 0.2s;
+}
+
+#compass .vantage:hover {
+  fill: #dff7f3;
+}
+
+#compass .vantage.near {
+  fill: #bdf0e8;
+}
+
+#compass .vantage.here {
+  fill: var(--aligned);
+}
+
+#compass-you {
+  fill: var(--accent);
+  stroke: #ffffff;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+/* The tray: a rack of letters on a shelf, and the turn's buttons. */
 #tray {
   position: fixed;
-  bottom: 16px;
+  bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -252,35 +609,69 @@ kbd {
   gap: 12px;
   width: max-content;
   max-width: calc(100vw - 32px);
+  padding: 10px 14px;
+  border-radius: 18px;
 }
 
 #rack {
   display: flex;
   gap: 6px;
+  min-height: 48px;
+  padding: 5px 7px 7px;
+  border-radius: 12px;
+  /* A wooden shelf the tiles sit on. */
+  background: linear-gradient(180deg, #e9cfa3, #d9b983);
+  box-shadow:
+    inset 0 2px 5px rgba(120, 84, 34, 0.3),
+    0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+#rack:empty::before {
+  content: 'Your letters appear here';
+  align-self: center;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(96, 70, 33, 0.7);
 }
 
 #rack .tile {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   padding: 0;
   border: 1px solid var(--tile-side);
   border-bottom-width: 4px;
-  border-radius: 6px;
-  background: var(--tile);
-  font-size: 22px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fdf0d0, var(--tile));
+  font-family: var(--display);
+  font-size: 24px;
   font-weight: 700;
+  line-height: 40px;
+  box-shadow: 0 2px 4px rgba(120, 84, 34, 0.25);
+}
+
+#rack .tile:hover:not(:disabled) {
+  transform: translateY(-4px);
+  box-shadow: 0 7px 12px rgba(120, 84, 34, 0.3);
+}
+
+#rack .tile:disabled {
+  opacity: 1;
 }
 
 #rack .tile sub {
   position: absolute;
   right: 4px;
-  bottom: 2px;
+  bottom: 1px;
+  font-family: var(--body);
   font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 #rack.idle .tile {
-  opacity: 0.75;
+  filter: saturate(0.85);
 }
 
 #actions,
@@ -294,111 +685,467 @@ kbd {
   border-left: 1px solid var(--line);
 }
 
-@media (max-width: 1300px) {
-  #status {
-    top: 112px;
+#play:not(:disabled) {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
+
+#play:not(:disabled) kbd {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+/* The score for a word, rising and fading over the monument. */
+#popup {
+  position: fixed;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#popup .pop {
+  animation: pop-rise 1.9s ease-out forwards;
+}
+
+#popup .points {
+  display: block;
+  font-family: var(--display);
+  font-size: 64px;
+  font-weight: 700;
+  color: var(--ink);
+  text-shadow:
+    0 2px 0 #ffffff,
+    0 8px 22px rgba(74, 63, 87, 0.28);
+}
+
+#popup .points.big {
+  color: var(--accent);
+}
+
+#popup .detail {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--aligned);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: var(--shadow);
+}
+
+#popup .detail.mission {
+  background: var(--success);
+}
+
+@keyframes pop-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08);
+  }
+  25% {
+    transform: scale(1);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-50px);
   }
 }
 
-@media (max-width: 720px) {
-  #title p,
-  kbd {
-    display: none;
-  }
-
-  #title h1 {
-    font-size: 18px;
-    margin-bottom: 34px;
-  }
-
-  #view-buttons {
-    max-width: calc(100vw - 32px);
-  }
-
-  #view-buttons button {
-    font-size: 12px;
-    padding: 5px 8px;
-  }
-
-  #stats > div {
-    min-width: 40px;
-    padding: 4px 6px;
-  }
-
-  #stats dd {
-    font-size: 16px;
-  }
-
-  #status {
-    top: 116px;
-    left: 16px;
-    right: 16px;
-    transform: none;
-    max-width: none;
-  }
-
-  #turn-actions {
-    padding-left: 0;
-    border-left: none;
-  }
-
-  #rack .tile {
-    width: 38px;
-    height: 38px;
-    font-size: 19px;
-  }
+#confetti {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 20;
 }
 
-#chamber {
+/* ---------- Full-screen cards ---------- */
+
+#intro,
+#summary,
+#lab,
+#chamber,
+#handoff {
   position: fixed;
   inset: 0;
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgba(74, 63, 87, 0.35);
-  backdrop-filter: blur(3px);
+  background: rgba(74, 63, 87, 0.3);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+  animation: veil-in 0.3s ease-out;
 }
 
-#chamber[hidden] {
-  display: none;
+#intro {
+  background: linear-gradient(180deg, rgba(253, 232, 220, 0.2), rgba(74, 63, 87, 0.28));
+  backdrop-filter: blur(2px);
 }
 
-.chamber-card {
-  width: min(560px, 100%);
+#handoff {
+  background: rgba(74, 63, 87, 0.45);
+  backdrop-filter: blur(8px);
+  z-index: 12;
+}
+
+.intro-card,
+.summary-card,
+.chamber-card,
+.lab-card {
   max-height: 100%;
   overflow: auto;
-  padding: 16px 20px 20px;
-  border-radius: 16px;
-  background: #fff8f2;
-  box-shadow: 0 18px 50px rgba(74, 63, 87, 0.25);
-  text-align: center;
+  box-sizing: border-box;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+  animation: card-in 0.45s var(--ease);
 }
 
-.chamber-card header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+@keyframes veil-in {
+  from {
+    opacity: 0;
+  }
 }
 
-.chamber-card h2 {
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+}
+
+/* Under the title screen, only the monument shows. */
+body.intro #title,
+body.intro #stats,
+body.intro #status,
+body.intro #tray,
+body.intro #compass,
+body.intro #missions,
+body.intro #players {
+  visibility: hidden;
+}
+
+/* ---------- Title screen ---------- */
+
+.intro-card {
+  width: min(880px, 100%);
+  padding: 30px 34px 24px;
+  background: rgba(255, 250, 245, 0.94);
+}
+
+/* The mark above the name: a block seen from a vantage point. */
+.intro-card h2 {
   margin: 0;
-  font-size: 18px;
-  letter-spacing: 0.04em;
+  padding-top: 58px;
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Cpath d='M30 6 52 18 30 30 8 18z' fill='%23f7e2b8'/%3E%3Cpath d='M8 18 30 30v24L8 42z' fill='%23b7a6db'/%3E%3Cpath d='M52 18 30 30v24l22-12z' fill='%23f19a8e'/%3E%3Cpath d='M30 11 43 18 30 25 17 18z' fill='%23fff7e3'/%3E%3C/svg%3E")
+    center top / 50px no-repeat;
 }
 
-#chamber-round {
-  font-size: 13px;
+.tagline {
+  margin: 8px 0 22px;
+  text-align: center;
+  font-size: 15px;
   color: var(--muted);
 }
 
-#chamber-prompt {
-  margin: 8px 0 10px;
+.intro-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin-bottom: 20px;
+}
+
+.intro-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.intro-steps li {
+  position: relative;
+  padding-left: 44px;
+  counter-increment: step;
+}
+
+/* Each step is numbered on a letter tile. */
+.intro-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 30px;
+  height: 28px;
+  border-radius: 7px;
+  border-bottom: 4px solid var(--tile-side);
+  background: var(--tile);
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 31px;
+}
+
+.intro-steps strong {
+  display: block;
+  font-size: 14.5px;
+}
+
+.intro-setup h3,
+.summary-heading {
+  margin: 0 0 6px;
+}
+
+.intro-setup h3:not(:first-child) {
+  margin-top: 15px;
+}
+
+/* A row of choices, one of them chosen. */
+.choice,
+#lab-geometry {
+  display: flex;
+  gap: 0;
+  padding: 3px;
+  border-radius: 11px;
+  background: #f1e8f2;
+}
+
+.choice button,
+#lab-geometry button {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+}
+
+.choice button:hover:not(:disabled),
+#lab-geometry button:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+  color: var(--ink);
+}
+
+.choice button[aria-pressed='true'],
+#lab-geometry button[aria-pressed='true'] {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: 0 2px 6px rgba(74, 63, 87, 0.16);
+}
+
+.blurb {
+  margin: 7px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+#player-names {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* Online rooms. */
+#online-setup {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#room-code {
+  width: 68px;
   font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.lobby-code {
+  margin: 0 0 7px;
+  font-size: 13px;
+}
+
+.lobby-code strong {
+  margin: 0 6px 0 4px;
+  font-family: var(--display);
+  font-size: 24px;
+  letter-spacing: 0.2em;
+}
+
+#lobby-players {
+  margin-bottom: 8px;
+}
+
+#lobby-players li {
+  box-shadow: none;
+  background: #f6eef3;
+}
+
+#lobby-start {
+  width: 100%;
+  font-size: 15px;
+  padding: 9px;
+}
+
+#online-status:empty {
+  display: none;
+}
+
+/* Best scores. */
+.scores {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+  font-size: 13px;
+}
+
+.scores li {
+  display: flex;
+  gap: 8px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: #f6eef3;
+}
+
+.scores li .place {
+  width: 1.4em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.scores li .name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scores li .score {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.scores li.new {
+  background: var(--pending);
+  font-weight: 800;
+}
+
+.scores li.empty {
+  padding-left: 0;
+  background: none;
+  color: var(--muted);
+}
+
+.intro-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.intro-actions button {
+  font-size: 15px;
+  padding: 10px 20px;
+  border-radius: 12px;
+}
+
+.intro-actions .primary {
+  min-width: 150px;
+  font-family: var(--display);
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 11px 26px 8px;
+}
+
+.intro-foot {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---------- The Hyperbolic Chamber ---------- */
+
+.chamber-card {
+  width: min(580px, 100%);
+  padding: 18px 22px 20px;
+  text-align: center;
+}
+
+.chamber-card header,
+.lab-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.chamber-card h2,
+.lab-card h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-align: left;
+}
+
+#chamber-round {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f1e8f2;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+#chamber-prompt {
+  min-height: 2.9em;
+  margin: 10px 0;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .chamber-stage {
   position: relative;
-  width: min(100%, 62vh);
+  width: min(100%, 60vh);
   aspect-ratio: 1;
   margin: 0 auto;
 }
@@ -419,28 +1166,31 @@ kbd {
   pointer-events: none;
 }
 
+/* Labels pinned to points of the disk: crystals, paths, corners. */
 .disk-labels span {
   position: absolute;
   transform: translate(-50%, -190%);
-  padding: 2px 7px;
-  border-radius: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
   background: var(--crystal);
   color: #ffffff;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   pointer-events: none;
   white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(74, 63, 87, 0.25);
 }
 
 .disk-labels span.answer {
-  outline: 2px solid #ffd54a;
+  outline: 2.5px solid #ffd54a;
 }
 
 #chamber-result {
-  min-height: 1.4em;
+  min-height: 1.45em;
   margin: 10px 0;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 #chamber-result.right {
@@ -453,273 +1203,11 @@ kbd {
 
 #chamber-go {
   font-size: 15px;
-  padding: 8px 18px;
-  background: var(--ink);
-  color: #ffffff;
-}
-
-/* Buttons that matter most on a screen, and quiet text-only ones. */
-button.primary {
+  padding: 10px 22px;
+  border-radius: 12px;
   background: var(--ink);
   border-color: var(--ink);
   color: #ffffff;
-}
-
-button.link {
-  border: none;
-  background: none;
-  color: var(--muted);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  font-size: 12px;
-}
-
-#mute {
-  align-self: center;
-  font-size: 12px;
-  padding: 5px 9px;
-  background: var(--panel);
-  border-color: var(--line);
-}
-
-#mute[aria-pressed='true'] {
-  color: var(--muted);
-  text-decoration: line-through;
-}
-
-/* The compass maps every view direction from above: the ring is the horizon,
-   the centre is straight down. Vantage points are the four dots; you are the
-   orange one. */
-#compass {
-  position: fixed;
-  right: 16px;
-  bottom: 88px;
-  width: 92px;
-  text-align: center;
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-#compass svg {
-  display: block;
-  width: 92px;
-  height: 92px;
-  margin-bottom: 2px;
-  overflow: visible;
-}
-
-#compass .ring {
-  fill: var(--panel);
-  stroke: var(--line);
-  stroke-width: 1.5;
-}
-
-#compass .vantage {
-  fill: #ffffff;
-  stroke: var(--aligned);
-  stroke-width: 2.5;
-  cursor: pointer;
-  pointer-events: auto;
-  transition: r 0.2s, fill 0.2s;
-}
-
-#compass .vantage.near {
-  fill: #bdf0e8;
-}
-
-#compass .vantage.here {
-  fill: var(--aligned);
-}
-
-#compass-you {
-  fill: var(--accent);
-  stroke: #ffffff;
-  stroke-width: 2;
-  pointer-events: none;
-}
-
-/* Full-screen cards over the monument: title, summary and the lab. */
-#intro,
-#summary,
-#lab {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: rgba(74, 63, 87, 0.28);
-  backdrop-filter: blur(2px);
-  z-index: 10;
-}
-
-#intro {
-  background: linear-gradient(180deg, rgba(253, 232, 220, 0.25), rgba(74, 63, 87, 0.3));
-}
-
-.intro-card,
-.summary-card {
-  width: min(520px, 100%);
-  max-height: 100%;
-  overflow: auto;
-  box-sizing: border-box;
-  padding: 28px 30px 24px;
-  border-radius: 18px;
-  background: rgba(255, 248, 242, 0.95);
-  box-shadow: 0 18px 50px rgba(74, 63, 87, 0.25);
-}
-
-.intro-card h2 {
-  margin: 0;
-  font-size: 34px;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  text-align: center;
-}
-
-.tagline {
-  margin: 4px 0 18px;
-  text-align: center;
-  color: var(--muted);
-}
-
-.intro-steps {
-  margin: 0 0 20px;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
-  display: grid;
-  gap: 12px;
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.intro-steps li {
-  position: relative;
-  padding-left: 40px;
-  counter-increment: step;
-}
-
-.intro-steps li::before {
-  content: counter(step);
-  position: absolute;
-  left: 0;
-  top: 1px;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  border-bottom: 3px solid var(--tile-side);
-  background: var(--tile);
-  font-weight: 700;
-  text-align: center;
-  line-height: 26px;
-}
-
-.intro-steps strong {
-  display: block;
-}
-
-.intro-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-}
-
-.intro-actions button {
-  font-size: 15px;
-  padding: 9px 18px;
-}
-
-.intro-foot {
-  margin: 16px 0 0;
-  text-align: center;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.summary-card {
-  text-align: center;
-}
-
-.summary-card h2 {
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.summary-score {
-  margin: 4px 0 14px;
-  font-size: 18px;
-}
-
-#summary-points {
-  font-size: 52px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
-#summary-stats {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin: 0 0 14px;
-}
-
-#summary-stats div {
-  min-width: 78px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-
-#summary-stats dt {
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-#summary-stats dd {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-#summary-words {
-  margin: 0 0 18px;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 4px;
-  font-size: 14px;
-}
-
-#summary-words li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: #f6eef3;
-}
-
-#summary-words li.best {
-  background: var(--pending);
-  font-weight: 700;
-}
-
-#summary-words .word {
-  letter-spacing: 0.12em;
-  font-weight: 700;
-}
-
-#summary-words .detail {
-  color: var(--muted);
-  font-size: 12px;
 }
 
 #chamber-skip {
@@ -727,35 +1215,21 @@ button.link {
   margin: 8px auto 0;
 }
 
-/* The lab: the disk beside a panel of readouts and things to try. */
+/* ---------- The Hyperbolic Lab ---------- */
+
 .lab-card {
-  width: min(1040px, 100%);
-  max-height: 100%;
-  overflow: auto;
-  box-sizing: border-box;
-  padding: 16px 20px 20px;
-  border-radius: 16px;
-  background: #fff8f2;
-  box-shadow: 0 18px 50px rgba(74, 63, 87, 0.25);
+  width: min(1060px, 100%);
+  padding: 18px 22px 22px;
 }
 
 .lab-card header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.lab-card h2 {
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: 0.04em;
+  margin-bottom: 12px;
 }
 
 .lab-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 22px;
   align-items: start;
 }
 
@@ -784,11 +1258,15 @@ button.link {
 
 .lab-panel {
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .lab-panel p {
   margin: 0 0 10px;
+}
+
+#lab-geometry {
+  margin-bottom: 12px;
 }
 
 .lab-help {
@@ -798,16 +1276,10 @@ button.link {
 
 .lab-help kbd {
   margin: 0;
-  opacity: 1;
-  font-weight: 700;
 }
 
 .lab-panel h3 {
   margin: 14px 0 6px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
 }
 
 #lab-readout {
@@ -818,9 +1290,9 @@ button.link {
 }
 
 #lab-readout div {
-  padding: 5px 8px;
+  padding: 6px 9px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-small);
   background: #ffffff;
 }
 
@@ -828,17 +1300,11 @@ button.link {
   grid-column: span 2;
 }
 
-#lab-readout dt {
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
 #lab-readout dd {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -847,10 +1313,10 @@ button.link {
 }
 
 #lab-status {
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 9px 11px;
+  border-radius: var(--radius-small);
   background: var(--pending);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 #lab-goals {
@@ -868,13 +1334,168 @@ button.link {
 
 #lab-goals li.done::after {
   content: ' ✓';
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .lab-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* ---------- Handoff and summary ---------- */
+
+.summary-card {
+  width: min(520px, 100%);
+  padding: 28px 30px 24px;
+  text-align: center;
+}
+
+.summary-card h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.summary-score {
+  margin: 2px 0 14px;
+  font-size: 18px;
+}
+
+#summary-points {
+  font-family: var(--display);
+  font-size: 64px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+#summary-standings {
+  max-width: 320px;
+  margin: 0 auto 14px;
+}
+
+#summary-standings li {
+  box-shadow: none;
+  border-color: var(--line);
+}
+
+#summary-stats {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+#summary-stats div {
+  min-width: 82px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+}
+
+#summary-stats dd {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+#summary-missions {
+  margin: 0 auto 14px;
+  max-width: 350px;
+  text-align: left;
+  font-size: 13px;
+}
+
+#summary-scores {
+  max-width: 320px;
+  margin: 0 auto 14px;
+  text-align: left;
+}
+
+#summary-words {
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+#summary-words li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 11px;
+  border-radius: 7px;
+  background: #f6eef3;
+}
+
+#summary-words li.best {
+  background: var(--pending);
+  font-weight: 800;
+}
+
+#summary-words .word {
+  letter-spacing: 0.12em;
+  font-weight: 800;
+}
+
+#summary-words .detail {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#handoff h2 {
+  margin: 4px 0 6px;
+  font-size: 34px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.handoff-label,
+.handoff-hint {
+  margin: 0;
+}
+
+.handoff-hint {
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#handoff-scores {
+  max-width: 280px;
+  margin: 0 auto 16px;
+}
+
+#handoff-scores li {
+  box-shadow: none;
+  border-color: var(--line);
+}
+
+#handoff-ready {
+  font-size: 15px;
+  padding: 10px 24px;
+  border-radius: 12px;
+}
+
+/* ---------- Smaller screens ---------- */
+
+@media (max-width: 1300px) {
+  #status {
+    top: 122px;
+  }
+
+  #missions {
+    top: auto;
+    bottom: 150px;
+    width: 204px;
+  }
 }
 
 @media (max-width: 860px) {
@@ -891,515 +1512,127 @@ button.link {
   }
 }
 
-/* Under the title screen, only the monument shows. */
-body.intro #title,
-body.intro #stats,
-body.intro #status,
-body.intro #tray,
-body.intro #compass,
-body.intro #missions {
-  visibility: hidden;
-}
-
-/* The lab's choice of geometry: three joined buttons. */
-#lab-geometry {
-  display: flex;
-  margin-bottom: 10px;
-}
-
-#lab-geometry button {
-  flex: 1;
-  border-radius: 0;
-  margin-left: -1px;
-}
-
-#lab-geometry button:first-child {
-  border-radius: 6px 0 0 6px;
-  margin-left: 0;
-}
-
-#lab-geometry button:last-child {
-  border-radius: 0 6px 6px 0;
-}
-
-#lab-geometry button[aria-pressed='true'] {
-  background: var(--ink);
-  color: #ffffff;
-}
-
-/* A gentle pulse on the button a new player should press next. */
-button.nudge {
-  border-color: var(--accent);
-  animation: nudge 1.4s ease-in-out infinite;
-}
-
-@keyframes nudge {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 138, 0, 0.55); }
-  50% { box-shadow: 0 0 0 7px rgba(255, 138, 0, 0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  button.nudge { animation: none; box-shadow: 0 0 0 3px rgba(255, 138, 0, 0.5); }
-}
-
-/* The swing bridge's button wears the bridge's blue. */
-#swing {
-  border-color: #4f8fc0;
-  color: #2a6a9e;
-}
-
-/* Missions: three goals for the run, under the view buttons. */
-#missions {
-  position: fixed;
-  left: 16px;
-  top: 128px;
-  width: 230px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-  font-size: 12px;
-}
-
-#missions h2 {
-  margin: 0 0 6px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-
-#mission-list,
-#summary-missions {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 5px;
-}
-
-#mission-list li,
-#summary-missions li {
-  position: relative;
-  padding-left: 22px;
-  line-height: 1.35;
-}
-
-#mission-list li::before,
-#summary-missions li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 1px;
-  width: 13px;
-  height: 13px;
-  border: 1.5px solid var(--muted);
-  border-radius: 4px;
-}
-
-#mission-list li.done,
-#summary-missions li.done {
-  color: var(--success);
-}
-
-#mission-list li.done::before,
-#summary-missions li.done::before {
-  content: '✓';
-  border-color: var(--success);
-  background: var(--success);
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 13px;
-  text-align: center;
-}
-
-#mission-list li.just {
-  animation: mission-done 0.9s ease-out;
-}
-
-@keyframes mission-done {
-  0% { transform: scale(1); }
-  30% { transform: scale(1.08); background: var(--pending); }
-  100% { transform: scale(1); }
-}
-
-#summary-missions {
-  margin: 0 auto 14px;
-  max-width: 340px;
-  text-align: left;
-  font-size: 13px;
-}
-
-/* The score for a word, rising and fading over the monument. */
-#popup {
-  position: fixed;
-  left: 50%;
-  top: 38%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-  pointer-events: none;
-  z-index: 5;
-}
-
-#popup .pop {
-  animation: pop-rise 1.8s ease-out forwards;
-}
-
-#popup .points {
-  display: block;
-  font-size: 56px;
-  font-weight: 800;
-  color: var(--ink);
-  text-shadow: 0 2px 0 #ffffff, 0 6px 18px rgba(74, 63, 87, 0.25);
-}
-
-#popup .points.big {
-  color: var(--accent);
-}
-
-#popup .detail {
-  display: inline-block;
-  margin-top: 2px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--aligned);
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-#popup .detail.mission {
-  background: var(--success);
-}
-
-@keyframes pop-rise {
-  0% { opacity: 0; transform: translateY(20px) scale(0.6); }
-  15% { opacity: 1; transform: translateY(0) scale(1.08); }
-  25% { transform: scale(1); }
-  75% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(-50px); }
-}
-
-#confetti {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  pointer-events: none;
-  z-index: 20;
-}
-
-#score.bump {
-  animation: score-bump 0.5s ease-out;
-}
-
-@keyframes score-bump {
-  40% { transform: scale(1.3); color: var(--accent); }
-}
-
-@media (max-width: 1300px) {
-  #missions {
-    top: auto;
-    bottom: 140px;
-    width: 200px;
+@media (max-width: 760px) {
+  .intro-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
   }
-}
 
-@media (max-width: 720px) {
+  .intro-card {
+    padding: 22px 20px 20px;
+  }
+
+  .intro-card h2 {
+    font-size: 30px;
+  }
+
+  /* Play stays in reach while the card scrolls. */
+  .intro-actions {
+    position: sticky;
+    bottom: -20px;
+    margin: 0 -20px;
+    padding: 14px 20px 20px;
+    background: linear-gradient(180deg, rgba(255, 250, 245, 0), var(--card) 34%);
+  }
+
+  #players,
   #missions {
     display: none;
   }
 }
 
+@media (max-width: 720px) {
+  #title p,
+  kbd {
+    display: none;
+  }
+
+  #title {
+    top: 12px;
+    left: 12px;
+  }
+
+  #title h1 {
+    font-size: 19px;
+    margin-bottom: 36px;
+  }
+
+  #view-buttons {
+    max-width: calc(100vw - 24px);
+  }
+
+  #view-buttons button {
+    font-size: 12px;
+    padding: 5px 8px;
+  }
+
+  #stats {
+    top: 10px;
+    right: 12px;
+    gap: 5px;
+  }
+
+  #stats > div {
+    min-width: 40px;
+    padding: 4px 6px;
+  }
+
+  #stats dd {
+    font-size: 17px;
+  }
+
+  #status {
+    top: 124px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    max-width: none;
+  }
+
+  #tray {
+    bottom: 10px;
+    padding: 8px;
+    gap: 8px;
+  }
+
+  #turn-actions {
+    padding-left: 0;
+    border-left: none;
+  }
+
+  #rack .tile {
+    width: 38px;
+    height: 38px;
+    font-size: 20px;
+    line-height: 33px;
+  }
+}
+
+/* ---------- Reduced motion ---------- */
+
 @media (prefers-reduced-motion: reduce) {
+  button,
+  #rack .tile {
+    transition: none;
+  }
+
+  button.nudge {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(255, 138, 0, 0.5);
+  }
+
+  #intro,
+  #summary,
+  #lab,
+  #chamber,
+  #handoff,
+  .intro-card,
+  .summary-card,
+  .chamber-card,
+  .lab-card,
   #popup .pop,
   #mission-list li.just,
   #score.bump {
     animation-duration: 0.01s;
   }
-}
-
-/* Title screen: how to play beside the choices of map and players. */
-.intro-card {
-  width: min(860px, 100%);
-}
-
-.intro-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 18px;
-}
-
-.intro-grid .intro-steps {
-  margin: 0;
-}
-
-.intro-setup h3,
-.summary-heading {
-  margin: 0 0 6px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-
-.intro-setup h3:not(:first-child) {
-  margin-top: 14px;
-}
-
-.choice {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.choice button {
-  flex: 1;
-  min-width: 0;
-  background: #ffffff;
-  border-color: var(--line);
-}
-
-.choice button[aria-pressed='true'] {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: #ffffff;
-}
-
-.blurb {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-#player-names {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-#player-names input {
-  min-width: 0;
-  font: inherit;
-  font-size: 13px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #ffffff;
-  color: var(--ink);
-}
-
-#player-names input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.scores {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 3px;
-  font-size: 13px;
-}
-
-.scores li {
-  display: flex;
-  gap: 8px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: #f6eef3;
-}
-
-.scores li .place {
-  width: 1.4em;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.scores li .name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.scores li .score {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.scores li.new {
-  background: var(--pending);
-  font-weight: 700;
-}
-
-.scores li.empty {
-  color: var(--muted);
-  background: none;
-  padding-left: 0;
-}
-
-/* Who is playing: the scores of every player, the one in the seat marked. */
-.standings {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 4px;
-}
-
-.standings li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  font-size: 13px;
-}
-
-.standings li.active {
-  border-color: var(--accent);
-  box-shadow: inset 3px 0 0 var(--accent);
-  font-weight: 700;
-}
-
-.standings li.winner {
-  background: var(--pending);
-  font-weight: 700;
-}
-
-.standings .score {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-
-#players {
-  position: fixed;
-  top: 92px;
-  right: 16px;
-  width: 190px;
-}
-
-#summary-standings {
-  max-width: 320px;
-  margin: 0 auto 14px;
-}
-
-#summary-scores {
-  max-width: 320px;
-  margin: 0 auto 16px;
-  text-align: left;
-}
-
-#handoff {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: rgba(74, 63, 87, 0.45);
-  backdrop-filter: blur(6px);
-  z-index: 12;
-}
-
-#handoff h2 {
-  margin: 0 0 6px;
-  font-size: 30px;
-  color: var(--ink);
-  text-transform: none;
-  letter-spacing: 0.02em;
-}
-
-.handoff-label {
-  margin: 0;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-}
-
-.handoff-hint {
-  margin: 0 0 14px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-#handoff-scores {
-  max-width: 280px;
-  margin: 0 auto 16px;
-}
-
-#handoff-ready {
-  font-size: 15px;
-  padding: 9px 22px;
-}
-
-body.intro #players {
-  visibility: hidden;
-}
-
-@media (max-width: 760px) {
-  .intro-grid {
-    grid-template-columns: 1fr;
-  }
-
-  #players {
-    display: none;
-  }
-}
-
-/* Online rooms on the title screen. */
-#online-setup {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-#room-code {
-  width: 64px;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  text-align: center;
-  padding: 5px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #ffffff;
-  color: var(--ink);
-}
-
-.lobby-code {
-  margin: 0 0 6px;
-  font-size: 13px;
-}
-
-.lobby-code strong {
-  font-size: 20px;
-  letter-spacing: 0.18em;
-  margin: 0 6px 0 4px;
-}
-
-#lobby-players {
-  margin-bottom: 8px;
-}
-
-#lobby-start {
-  width: 100%;
-  font-size: 15px;
-  padding: 8px;
-}
-
-#online-status:empty {
-  display: none;
 }

@@ -1,3 +1,5 @@
+import '@fontsource-variable/josefin-sans';
+import '@fontsource-variable/nunito';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import wordsUrl from '../node_modules/word-list/words.txt?url';
@@ -35,7 +37,7 @@ import { MISSION_POINTS, completeMissions, pickMissions } from './missions.js';
 import { openRoom } from './online.js';
 import { MAX_PLAYERS, createPlayers, seat, standings, turnsFor } from './players.js';
 import { placementDirection, placementOptions } from './placement.js';
-import { BoardView } from './scene.js';
+import { BoardView, forgetTextures } from './scene.js';
 import { Traveller } from './traveller.js';
 
 // A testing aid, in development only: ?raf=timer drives every animation from
@@ -119,6 +121,42 @@ scene.add(fill);
 
 let view = new BoardView(board, scene, game.bonuses);
 for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed');
+
+// Tiles are drawn with the display font; once it has loaded, draw them again.
+document.fonts
+  ?.load('700 150px "Josefin Sans Variable"')
+  .then(() => {
+    forgetTextures();
+    view.redraw();
+  })
+  .catch(() => {});
+
+// A soft shadow on the ground beneath the monument, so it sits in the sky
+// rather than hanging in it.
+{
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const fade = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  fade.addColorStop(0, 'rgba(92, 70, 110, 0.5)');
+  fade.addColorStop(0.5, 'rgba(92, 70, 110, 0.22)');
+  fade.addColorStop(1, 'rgba(92, 70, 110, 0)');
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, size, size);
+  const extent = new THREE.Box3();
+  for (const cell of board.cells) extent.expandByPoint(new THREE.Vector3(...cell));
+  const span = extent.getSize(new THREE.Vector3());
+  const shadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, depthWrite: false }),
+  );
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.scale.set(span.x * 1.9 + 6, span.z * 1.9 + 6, 1);
+  shadow.position.set((extent.min.x + extent.max.x) / 2, extent.min.y - 0.56, (extent.min.z + extent.max.z) / 2);
+  shadow.renderOrder = -1;
+  scene.add(shadow);
+}
 
 // The traveller waits on the plaza and walks along every word played.
 const traveller = new Traveller(scene);
