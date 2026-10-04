@@ -15,28 +15,63 @@ function loadMuted() {
   }
 }
 
-export function createSound() {
+export function createSound({ onChange = () => {} } = {}) {
   let ctx = null;
   let master = null;
-  let pad = null;
+  let ambience = null;
+  let musicTimer = null;
+  let nextNote = 0;
+  let melodyIndex = 0;
   let muted = loadMuted();
+  let available = Boolean(window.AudioContext ?? window.webkitAudioContext);
 
-  function unlock() {
-    if (ctx) {
-      if (ctx.state === 'suspended') ctx.resume();
-      return;
+  async function unlock() {
+    if (!available) return false;
+    try {
+      if (!ctx) {
+        const Context = window.AudioContext ?? window.webkitAudioContext;
+        ctx = new Context({ latencyHint: 'playback' });
+        master = ctx.createGain();
+        master.gain.value = muted ? 0 : 0.6;
+        master.connect(ctx.destination);
+        ctx.addEventListener('statechange', updatePlayback);
+        startPad();
+      }
+      // Chrome may create a suspended context even during the first gesture.
+      // Resume the new context too, and allow later gestures to retry.
+      if (ctx.state !== 'running') await ctx.resume();
+      updatePlayback();
+      return ctx.state === 'running';
+    } catch {
+      if (!ctx) available = false;
+      updatePlayback();
+      return false;
     }
-    const Context = window.AudioContext ?? window.webkitAudioContext;
-    if (!Context) return;
-    ctx = new Context();
-    master = ctx.createGain();
-    master.gain.value = muted ? 0 : 0.5;
-    master.connect(ctx.destination);
-    startPad();
+  }
+
+  function updatePlayback() {
+    if (ctx?.state === 'running' && !muted) startMusic();
+    else {
+      clearInterval(musicTimer);
+      musicTimer = null;
+    }
+    onChange();
+  }
+
+  function setMuted(value) {
+    muted = Boolean(value);
+    try {
+      localStorage.setItem(STORAGE_KEY, muted ? '1' : '0');
+    } catch {
+      // Storage can be refused; the setting then lasts for this visit.
+    }
+    if (master) master.gain.setTargetAtTime(muted ? 0 : 0.6, ctx.currentTime, 0.05);
+    updatePlayback();
+    return muted;
   }
 
   // One note: an oscillator through its own envelope.
-  function tone(freq, { type = 'sine', at = 0, attack = 0.005, decay = 0.4, gain = 0.2, to = null } = {}) {
+  function tone(freq, { type = 'sine', at = 0, attack = 0.005, decay = 0.4, gain = 0.2, to = null, output = master } = {}) {
     if (!ctx || muted) return;
     const start = ctx.currentTime + at;
     const osc = ctx.createOscillator();
@@ -47,15 +82,16 @@ export function createSound() {
     env.gain.setValueAtTime(0, start);
     env.gain.linearRampToValueAtTime(gain, start + attack);
     env.gain.exponentialRampToValueAtTime(0.0001, start + attack + decay);
-    osc.connect(env).connect(master);
+    osc.connect(env).connect(output);
+    osc.onended = () => { osc.disconnect(); env.disconnect(); };
     osc.start(start);
     osc.stop(start + attack + decay + 0.05);
   }
 
   // A bell: a fundamental with a quieter, faster-fading overtone.
-  function bell(freq, at = 0, gain = 0.16, decay = 1.1) {
-    tone(freq, { at, gain, decay });
-    tone(freq * 2.76, { at, gain: gain * 0.25, decay: decay * 0.4 });
+  function bell(freq, at = 0, gain = 0.16, decay = 1.1, output = master) {
+    tone(freq, { at, gain, decay, output });
+    tone(freq * 2.76, { at, gain: gain * 0.25, decay: decay * 0.4, output });
   }
 
   // A breath of filtered noise, for the world sliding past.
@@ -79,13 +115,14 @@ export function createSound() {
     env.gain.linearRampToValueAtTime(gain, start + duration * 0.4);
     env.gain.linearRampToValueAtTime(0, start + duration);
     source.connect(filter).connect(env).connect(master);
+    source.onended = () => { source.disconnect(); filter.disconnect(); env.disconnect(); };
     source.start(start);
   }
 
-  // A quiet drone of two slightly detuned fifths that slowly breathes.
+  // A warm chord with a slow breath, audible under the sparse bell melody.
   function startPad() {
-    pad = ctx.createGain();
-    pad.gain.value = 0.035;
+    const pad = ctx.createGain();
+    pad.gain.value = 0.09;
     pad.connect(master);
     for (const [freq, detune] of [
       [130.81, -4],
@@ -99,14 +136,45 @@ export function createSound() {
       const lfo = ctx.createOscillator();
       const depth = ctx.createGain();
       lfo.frequency.value = 0.07 + Math.random() * 0.05;
-      depth.gain.value = 0.4;
+      depth.gain.value = 0.15;
       const voice = ctx.createGain();
-      voice.gain.value = 0.5;
+      voice.gain.value = 0.3;
       lfo.connect(depth).connect(voice.gain);
       osc.connect(voice).connect(pad);
       osc.start();
       lfo.start();
     }
+
+    // A soft echo gives background bells space without clouding game cues.
+    ambience = ctx.createGain();
+    ambience.connect(master);
+    const delay = ctx.createDelay(1);
+    delay.delayTime.value = 0.45;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.22;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.25;
+    ambience.connect(delay).connect(wet).connect(master);
+    delay.connect(feedback).connect(delay);
+  }
+
+  // Schedule a little ahead on the audio clock so the melody stays smooth
+  // while the player orbits, visits the chamber, or opens the lab.
+  function startMusic() {
+    if (musicTimer !== null) return;
+    const melody = [0, 2, 4, 2, 1, 3, 2, null, 0, 2, 4, 5, 4, 3, 1, null];
+    nextNote = ctx.currentTime + 0.15;
+    const schedule = () => {
+      if (ctx.state !== 'running' || muted) return;
+      if (nextNote < ctx.currentTime) nextNote = ctx.currentTime + 0.15;
+      while (nextNote < ctx.currentTime + 0.8) {
+        const note = melody[melodyIndex++ % melody.length];
+        if (note !== null) bell(SCALE[note] / 2, nextNote - ctx.currentTime, 0.075, 2.8, ambience);
+        nextNote += 2.4;
+      }
+    };
+    musicTimer = setInterval(schedule, 250);
+    schedule();
   }
 
   return {
@@ -114,16 +182,12 @@ export function createSound() {
     get muted() {
       return muted;
     },
-    toggleMute() {
-      muted = !muted;
-      try {
-        localStorage.setItem(STORAGE_KEY, muted ? '1' : '0');
-      } catch {
-        // Storage can be refused; the setting then lasts for this visit.
-      }
-      if (master) master.gain.setTargetAtTime(muted ? 0 : 0.5, ctx.currentTime, 0.05);
-      return muted;
+    get playing() {
+      return !muted && ctx?.state === 'running';
     },
+    get available() { return available; },
+    setMuted,
+    toggleMute: () => setMuted(!muted),
 
     place: (i = 0) => tone(SCALE[i % 5] / 2, { type: 'triangle', decay: 0.18, gain: 0.22 }),
     undo: () => tone(392, { type: 'triangle', decay: 0.12, gain: 0.14, to: 300 }),

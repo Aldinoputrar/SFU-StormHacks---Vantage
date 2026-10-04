@@ -24,7 +24,7 @@ Every face of every block can hold letters: tops, sides and undersides. Each fac
 
 One connected monument: a lavender tower in the middle, a coral Penrose crown resting on the tower, and four mint arms in a pinwheel.
 
-- **Four views, like Monument Valley's rotations.** Vantage points are the four isometric views from above. Each arm's far end is shifted one step along one of those view directions, so each arm only joins the structure, and its words only connect, from one corner. From anywhere else it is a broken bridge.
+- **Four views, like Monument Valley's rotations.** Vantage points are the four isometric views from above. Each arm's far end is shifted one step along one of those view directions, so each arm's words only connect from one corner. From anywhere else it is a broken bridge. Two western arms have short three-block extensions that add another join from their own corner.
 - **Hook words.** Lines read out along each arm, with starting and ending words: LOVEABLE, SUNRISE, LODESTAR, MOTION.
 - **The Penrose crown.** Four strips around a square, each lifted a different amount along the home view (1, 1, 1). From that view the lifts vanish and the strips close into one ring of 12 tiles with no start and no end, so a word can run round a corner and past any point. Orbit away and it opens into a staircase that climbs at three corners yet returns to where it started. One side rests on the tower, so the crown is part of the monument.
 - **Reveal the trick** swings the camera away from a vantage point and back, with dashed bars across every hidden gap.
@@ -58,7 +58,7 @@ Controls: <kbd>W A S D</kbd> or arrow keys to walk, hold the floor to walk towar
 ## How to play
 
 1. **Earn letters** in the Hyperbolic Chamber.
-2. **Find a vantage point.** Orbit the monument; release near one of the four isometric views and the camera snaps to it. Lines that join from there glow.
+2. **Find a vantage point.** Orbit the monument; release near one of the four isometric views and the camera snaps to it. Click a tile to light up and select its line.
 3. **Play a word.** Click a tile to lock the view and choose the line through it, then type or tap letters. A word must use at least one letter already on the board, and every word it makes sideways on the same face must be valid too.
 4. **Check and score.** Words are checked with Merriam-Webster's Scrabble dictionary, then scored, and you return to the chamber for new letters.
 
@@ -99,7 +99,7 @@ Both differences must point along **d**, which fixes the viewpoint up to sign; t
 
 - keeps only the four isometric views from above, the four rotations of a Monument Valley level; any two parallel strips line up from *some* angle, so this keeps vantage points special,
 - ignores strips that touch round a block's edge (no real gap, no illusion) and single tiles (a lone tile lines up with something from almost anywhere),
-- drops joins where another block hides either joining end, by stepping rays through the voxel grid from the centre and corners of each tile towards the camera ([`src/geometry.js`](src/geometry.js)); tiles covered further along a line stay part of it,
+- drops joins where another block completely hides either joining end, by stepping rays through the voxel grid from the centre and corners of each tile towards the camera ([`src/geometry.js`](src/geometry.js)); partly covered endpoints can join, and covered squares remain accessible in the word strip,
 - snaps the camera to a vantage point when you let go within 10° of it.
 
 Run `npm run vantages` to list every vantage point in a level and the strips that join there.
@@ -123,7 +123,7 @@ The structure takes inspiration from Penrose stairs, Escher's Waterfall and Monu
 ## Stack
 
 - [Three.js](https://threejs.org/) for 3D graphics and the chamber's shader
-- The Web Audio API for every sound: soft bells on a pentatonic scale, synthesised in [`src/audio.js`](src/audio.js), so there are no audio files
+- The Web Audio API for every sound: calm background music with a warm chord and a slow pentatonic bell melody, synthesised in [`src/audio.js`](src/audio.js), so there are no audio files. Playback starts after an interaction; the sound button reports whether it has actually started.
 - Vite for development, builds and the dictionary proxy
 - Node's built-in test runner
 
@@ -134,7 +134,7 @@ npm install
 npm run dev
 ```
 
-Open the printed local URL and press **Play**. You start in the Hyperbolic Chamber; collect your letters, then press **Isometric view** to see LOVE on the base arm run straight into ABLE on its floating arm as LOVEABLE. Or open **Explore the Hyperbolic Lab** and press **Walk a square for me**.
+Open the printed local URL and press **Play**. You start in the Hyperbolic Chamber; collect your letters, then press **Isometric view** to see the base arm run straight into ABLE on its floating arm. Its first four squares are empty: use letters from your rack to make TABLE, CABLE, UNABLE or LOVEABLE. Or open **Explore the Hyperbolic Lab** and press **Walk a square for me**.
 
 To check words with Merriam-Webster, the server must be able to reach `scrabble.merriam.com`. If it can't (offline, or a network that blocks the site), the game still works with the offline list.
 
@@ -148,9 +148,9 @@ npm run build     # production build in dist/
 
 - **Chamber:** click a crystal (or press 1, 2, 3 or A, B, C).
 - **Lab:** W A S D or arrow keys to walk, hold the floor to walk towards it, click to drop triangle corners.
-- **Drag** to orbit, **scroll** to zoom. The game starts in an overhead view; **Overhead view** returns to it and **Isometric view** jumps to the home vantage point. Let go near a vantage point and the camera snaps to it; joined lines glow.
-- **Click a tile** to lock the view and pick the line through it. Click the same tile again, or the switch button, to change to the other line through it.
-- **Choose your direction.** The heading shows Across, Down or Diagonal before you type. Across is chosen first where lines cross; the switch button names the other direction.
+- **Drag** to orbit, **scroll** to zoom. The game starts in an overhead view; **Overhead view** returns to it and **Isometric view** jumps to the home vantage point. Let go near a vantage point and the camera snaps to it.
+- **Click a tile** to lock the view, pick its line and light it up. A joined line or crown loop is chosen first. Click the same tile again, or the switch button, to change to the other line through it.
+- **Choose your direction.** The heading shows Across, Down or Diagonal before you type. Ordinary intersections start Across; the switch button names the other direction.
 - **Covered squares stay in the line.** Clicks on the board always pick the surface you can see. Squares underneath another block have a dashed mark in the word strip: click them there to type on them. Letters stay on their own block.
 - **Type** letters (or tap your rack) to place them along the line, **Backspace** to undo, **Enter** to play, **Esc** to cancel.
 - **Reveal the trick** shows the real 3D gaps behind the lines joined at the current vantage point.

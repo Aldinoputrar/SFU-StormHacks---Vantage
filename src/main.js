@@ -35,14 +35,13 @@ const SNAP_MS = 350;
 const OVERHEAD = [0.003, 1, 0.3];
 const REVEAL_TURN = THREE.MathUtils.degToRad(40); // how far reveal swings the camera
 const REVEAL_HOLD_MS = 2000;
-// Behind the title screen the monument turns slowly, flashing as it passes
-// each vantage point.
+// Behind the title screen the monument turns slowly.
 const INTRO_VIEW = [1, 0.75, 0.25];
 const INTRO_SPIN = 0.09; // radians per second
 
 const board = buildBoard(MONUMENT);
 const game = createGame(MONUMENT, board);
-const sound = createSound();
+const sound = createSound({ onChange: () => showMute() });
 const chamber = createChamber({ sound });
 const lab = createLab({ sound });
 const chamberStats = { right: 0, rounds: 0 };
@@ -130,7 +129,7 @@ const viewDir = () => camera.position.clone().sub(controls.target).normalize().t
 let mode = 'intro';
 let labOpen = false;
 let summaryShown = false;
-let current = chainsForView(board, viewDir()); // every line, as seen from the camera
+let current = chainsForView(board, viewDir(), undefined, true);
 let selection = null; // { chain, cursor, clicked } while placing
 let lockedDir = null;
 let snap = null;
@@ -184,7 +183,7 @@ function setMessage(text, tone = 'info', ms = 5000) {
 
 let wasJoined = false;
 function refresh() {
-  if (mode !== 'placing' && mode !== 'checking' && !revealing) current = chainsForView(board, viewDir());
+  if (mode !== 'placing' && mode !== 'checking' && !revealing) current = chainsForView(board, viewDir(), undefined, true);
   view.orientLetters(camera);
   // A chime as strips come together.
   const joinedNow = current.chains.some(isJoined);
@@ -192,9 +191,6 @@ function refresh() {
   wasJoined = joinedNow;
 
   const highlights = new Map();
-  for (const chain of current.chains.filter(isJoined)) {
-    for (const key of chain.slots) highlights.set(key, 'aligned');
-  }
   if (selection) {
     for (const key of selection.chain.slots) highlights.set(key, 'selected');
     const cursor = selection.chain.slots[selection.cursor];
@@ -253,12 +249,12 @@ function renderHud() {
       const loops = joined.filter((chain) => chain.cyclic).length;
       headline = `Vantage point! ${joined.length} line${joined.length > 1 ? 's' : ''} joined`;
       if (loops) headline += ' + an endless loop';
-      hint = 'Click a glowing tile to play along it · Words must use a letter already on the board';
+      hint = 'Click a tile to select and light up its line · Words must use a letter already on the board';
       // The first turn, from the home view: point at the illusion itself.
-      const home = joined.find((chain) => chain.slots.map((key) => letterAt(game, key) || '.').join('') === '.......ABLE');
+      const home = joined.find((chain) => chain.slots.map((key) => letterAt(game, key) || '.').join('') === '....ABLE');
       if (!game.history.length && home) {
         hint =
-          'ABLE floats blocks away, yet from here the plaza row runs straight into it. Click the glowing tile just before A and type T, C or S (or start four back for LOVE).';
+          'ABLE floats blocks away, yet this arm runs straight into it. Click the tile just before A and type T, C or S from your rack (or start four back for LOVE).';
       }
     } else {
       headline = near && near.angle < HINT_ANGLE ? 'Something lines up nearby…' : 'Find where the strips line up';
@@ -477,7 +473,7 @@ function exitPlacing() {
   refresh();
 }
 
-// The lines through a slot, across first (see placement.js).
+// The lines through a slot, joined lines first (see placement.js).
 function lineOptions(key) {
   return placementOptions(board, current, key, lockedDir ?? viewDir());
 }
@@ -755,20 +751,27 @@ document.getElementById('intro-play').addEventListener('click', () => {
 
 const muteButton = document.getElementById('mute');
 const showMute = () => {
-  muteButton.textContent = sound.muted ? 'Sound off' : 'Sound on';
+  muteButton.textContent = !sound.available ? 'Sound unavailable' : sound.muted ? 'Sound off' : sound.playing ? 'Sound on' : 'Start sound';
   muteButton.setAttribute('aria-pressed', String(sound.muted));
+  muteButton.disabled = !sound.available;
 };
 muteButton.addEventListener('click', () => {
+  sound.setMuted(sound.playing);
   sound.unlock();
-  sound.toggleMute();
   showMute();
 });
 showMute();
 // Any interaction may start the audio; browsers refuse it before one.
-const unlockAudio = () => sound.unlock();
+const unlockAudio = (event) => {
+  // The sound button handles its own gesture, so starting it cannot also mute it.
+  if (!event.target.closest?.('#mute')) sound.unlock();
+};
 ['pointerdown', 'click', 'keydown', 'touchstart'].forEach((evt) =>
   window.addEventListener(evt, unlockAudio, { passive: true }),
 );
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) sound.unlock();
+});
 
 refresh();
 let frame = 0;
@@ -779,7 +782,7 @@ renderer.setAnimationLoop((time) => {
   // While another screen has the page, the monument behind it barely moves.
   if ((chamber.isOpen() || lab.isOpen()) && frame++ % 20) return;
   if (mode === 'intro' && !labOpen) {
-    // Orbit controls report the change, which refreshes the glow.
+    // Orbit controls report the change, which refreshes the view.
     camera.position.sub(controls.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), INTRO_SPIN * dt).add(controls.target);
     controls.update();
   }
@@ -792,6 +795,8 @@ renderer.setAnimationLoop((time) => {
 if (import.meta.env.DEV) {
   window.vantage = {
     game,
+    selection: () => selection,
+    highlights: () => [...view.highlights.keys()],
     slotOnScreen(key) {
       const point = new THREE.Vector3(...board.slots.get(key).center).project(camera);
       return { x: ((point.x + 1) / 2) * window.innerWidth, y: ((1 - point.y) / 2) * window.innerHeight };

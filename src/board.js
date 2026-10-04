@@ -164,12 +164,16 @@ function visibilitySamples(board, key, dir) {
   return samples.map((origin) => !rayHitsVoxel(origin, dir, board.isSolid));
 }
 
-// Perspective joins need fully readable endpoints, not just a visible corner.
+// Fully visible slots are useful for validating a declared loop at its view.
 function slotsVisible(board, keys, dir) {
   return keys.every((key) => visibilitySamples(board, key, dir).every(Boolean));
 }
 
 export const slotVisible = (board, key, dir) => slotsVisible(board, [key], dir);
+
+// Joins and line selection share a visibility rule: partial cover is fine,
+// and covered squares remain accessible through the word strip.
+const slotSelectable = (board, key, dir) => visibilitySamples(board, key, dir).some(Boolean);
 
 function findJoins(board) {
   const ends = board.lines.flatMap((line) => lineEnds(board, line));
@@ -182,7 +186,7 @@ function findJoins(board) {
       const dir = joinDirection(a, b);
       // A join is a visible meeting of two endpoints. A covered tile farther
       // along either strip does not change that strip's physical continuity.
-      if (!dir || !slotsVisible(board, [a.slot.key, b.slot.key], dir)) continue;
+      if (!dir || ![a.slot.key, b.slot.key].every((key) => slotSelectable(board, key, dir))) continue;
       joins.push({ a: { line: a.line.id, end: a.end }, b: { line: b.line.id, end: b.end }, dir });
     }
   }

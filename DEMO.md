@@ -6,7 +6,7 @@ A three-minute walkthrough for judges, written for the Beyond Euclid challenge. 
 
 > "Vantage is Scrabble played on two kinds of impossible space. The board is an Escher-style monument where words only join up from the right viewpoint, and you earn your letters in the hyperbolic plane."
 
-Let the title screen sit for a moment: the monument turns behind it and flashes each time it passes a vantage point.
+Let the title screen sit for a moment: the monument turns behind it.
 
 ## 0:20 – Hyperbolic Chamber (*Geometric creativity, Educational value*)
 
@@ -26,7 +26,7 @@ After the third round the crystals slide to the middle and become a triangle:
 
 Collect the letters. Point out the **compass** (bottom right): the orange dot is the camera, the four dots are vantage points.
 
-Drag to orbit and let go near a corner: the camera snaps and the line glows.
+Drag to orbit and let go near a corner: the camera snaps. Click a tile and its selected line lights up.
 
 > "ABLE is four blocks away on a floating arm, but from this corner the plaza row runs straight into it."
 
@@ -56,7 +56,7 @@ Walk a loop with W A S D and come back to the star:
 
 ## 2:45 – Close (*Technical execution, Documentation*)
 
-> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. Sixty-six Node tests cover alignment, rules, the dictionary and the hyperbolic maths. The README explains every formula."
+> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. Seventy-four Node tests cover alignment, placement, audio, rules, the dictionary and the hyperbolic maths. The README explains every formula."
 
 ## Questions you might get
 

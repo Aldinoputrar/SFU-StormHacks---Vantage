@@ -1,14 +1,14 @@
 import { dot, screenBasis, sub } from './geometry.js';
 import { isJoined } from './board.js';
 
-// At an intersection, start across when available. The alternative remains
-// explicit in the direction switch, rather than choosing whichever is longest.
+// A perspective join or loop is the reason to choose a vantage point, so
+// select it first. Ordinary intersections still start across when available.
 export function placementOptions(board, view, key, viewDir) {
   const across = (chain) => placementDirection(board, chain, viewDir).startsWith('Across');
   return (view.bySlot.get(key) ?? [])
     .filter((chain) => chain.slots.length >= 2)
-    .sort((a, b) => Number(across(b)) - Number(across(a)) ||
-      Number(isJoined(b)) - Number(isJoined(a)) || b.slots.length - a.slots.length);
+    .sort((a, b) => Number(isJoined(b)) - Number(isJoined(a)) ||
+      Number(across(b)) - Number(across(a)) || b.slots.length - a.slots.length);
 }
 
 // Describe the actual reading direction on screen, not the strip's world axis.

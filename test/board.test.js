@@ -67,10 +67,37 @@ test('the monument has one vantage point per isometric corner', () => {
   for (const { dir } of board.vantages) assert.ok(chainsForView(board, dir).chains.some(isJoined));
 });
 
-test('ABLE on the far arm ends a line that starts on the plaza, from the home view', () => {
+test('ABLE leaves four playable squares on its joined home-view line', () => {
   const game = createGame(MONUMENT, board);
   const words = chainsForView(board, HOME).chains.filter(isJoined).map((chain) => lettersOf(game, chain));
-  assert.ok(words.includes('LOVEABLE'), `got ${words}`);
+  assert.ok(words.includes('....ABLE'), `got ${words}`);
+});
+
+test('a new player can write TABLE across the home-view join', () => {
+  const game = freshGame(['T']);
+  const chain = chainsForView(board, HOME, undefined, true).chains.find((c) => lettersOf(game, c) === '....ABLE');
+  place(game, [chain.slots[3]], 'T');
+  const result = playWord(game, chain, HOME, (word) => word === 'TABLE');
+  assert.equal(result.word, 'TABLE');
+  assert.equal(result.points.surfaces, 2);
+});
+
+test('six added blocks form two playable three-surface extensions', () => {
+  assert.equal(board.cells.length, 57);
+  for (const [view, ending, indexes, text, word] of [
+    [VIEWS.northWest, 'STAR', [8], 'S', 'STARS'],
+    [VIEWS.southWest, 'TION', [2, 3, 8], 'ACS', 'ACTIONS'],
+  ]) {
+    const dir = normalize(view);
+    const game = freshGame([...text]);
+    const chain = chainsForView(board, dir, undefined, true).chains.find((c) =>
+      c.slots.length === 11 && lettersOf(game, c) === `....${ending}...`,
+    );
+    assert.ok(chain, ending);
+    assert.equal(new Set(chain.slotLines).size, 3);
+    place(game, indexes.map((i) => chain.slots[i]), text);
+    assert.equal(playWord(game, chain, dir, (candidate) => candidate === word).word, word);
+  }
 });
 
 test('the join disappears a few degrees away from the vantage point', () => {
@@ -207,14 +234,14 @@ test('partial cover preserves loop continuity and wraparound word placement', ()
 
 test('tiles off the selected line are rejected', () => {
   const game = freshGame(['U', 'N', 'E', 'E', 'E', 'E', 'E']);
-  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === 'LOVEABLE');
+  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '....ABLE');
   place(game, [slotKey([1, 0, 1], '-y')], 'U');
   assert.match(preparePlay(game, chain, HOME).error, /selected line/);
 });
 
 test('tiles must not leave gaps', () => {
   const game = freshGame(['U', 'N', 'E', 'E', 'E', 'E', 'E']);
-  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === 'LOVEABLE');
+  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '....ABLE');
   assert.ok(chain);
 });
 
@@ -225,7 +252,7 @@ test('a new word must use a letter already on the board', () => {
 
 test('a joined word scores its letters times the surfaces it spans', () => {
   const game = freshGame(['U', 'N', 'E', 'E', 'E', 'E', 'E']);
-  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === 'LOVEABLE');
+  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '....ABLE');
   assert.ok(chain);
 });
 
@@ -318,7 +345,7 @@ test('triple word squares sit only on lines that join others', () => {
 
 test('a bonus counts under a newly placed tile', () => {
   const game = freshGame(['U', 'N', 'E', 'E', 'E', 'E', 'E']);
-  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === 'LOVEABLE');
+  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '....ABLE');
   assert.ok(chain);
 });
 
@@ -335,6 +362,6 @@ test('a single tile may make its word sideways only', () => {
 
 test('taking tiles back returns them to where they were in the rack', () => {
   const game = freshGame(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
-  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === 'LOVEABLE');
+  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '....ABLE');
   assert.ok(chain);
 });

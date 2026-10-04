@@ -84,6 +84,9 @@ export const MONUMENT = {
     ...arm([1, 0, -1], [0, 0, -1], VIEWS.northEast),
     ...arm([-1, 0, -1], [-1, 0, 0], VIEWS.northWest),
     ...arm([-1, 0, 1], [0, 0, 1], VIEWS.southWest),
+    // Two short extensions: one more perspective join on each western arm.
+    { start: [-11, 2, -3], dir: [-1, 0, 0], length: 3, color: MINT },
+    { start: [-3, 2, 11], dir: [0, 0, 1], length: 3, color: MINT },
   ],
   // Closed rings of tiles, each seen as one from a single viewpoint.
   loops: [CROWN.loop],
@@ -92,7 +95,6 @@ export const MONUMENT = {
   // reads from the plaza out along its arm, so the far ends invite words that
   // finish there: LOVE...ABLE, ...RISE, ...STAR, ...TION.
   words: [
-    { start: [1, 0, 1], dir: [1, 0, 0], face: '+y', text: 'LOVE' },
     { start: [6, 1, 2], dir: [1, 0, 0], face: '+y', text: 'ABLE' },
     { start: [2, 1, -6], dir: [0, 0, -1], face: '+y', text: 'RISE' },
     { start: [-6, 1, -2], dir: [-1, 0, 0], face: '+y', text: 'STAR' },
