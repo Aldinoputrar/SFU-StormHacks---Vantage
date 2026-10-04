@@ -48,44 +48,33 @@ Letters are dealt automatically at the start of every turn (each tile the better
 
 | Result | Choose one of |
 | --- | --- |
-| Two stars | **Wild tile** (any letter; scores nothing itself), **Double score** (arm it before a word), **Extra turn** |
+| Two stars | Two randomly selected options from **Wild tile** (any letter; scores nothing itself), **Double score** (arm it before a word), and **Extra turn** |
 | One star | **Extra hint**, **Free swap** (new letters without using a turn) |
 
 The floor is a tiling of triangles, eight at each corner. Every triangle is the same size in hyperbolic terms, so they shrink towards the rim, and every game turns on that: space near the rim is much bigger than it looks.
 
-The four action games score up to two stars; the quick puzzle, one of four questions, scores one.
+### Five Chamber choices
 
-### Action games
+The menu offers five games, in this order. The first four are action games that can earn up to two stars; **Quick puzzle** gives you one question and can earn one star. Finishing a game uses that turn's Chamber visit. You can choose **Back to the board** before starting a game and return later in the same turn.
 
-All four run on the same hyperbolic floor ([`src/arcade.js`](src/arcade.js)), and the tests play each one to check it can be won and lost ([`test/arcade.test.js`](test/arcade.test.js)).
+1. **Crystal dash.** Collect as many crystals as you can in **15 seconds**. Move with **W A S D**, the **arrow keys**, or by holding the floor towards where you want to go. Catching crystals quickly builds a combo worth up to three points per crystal; gold crystals always give three. Earn **two stars at 32 points**, or **one star at 14 points**. Distances stretch near the rim, so a crystal that looks nearby may take longer to reach.
+2. **Geodesic golf.** Putt the white ball into the dark hole within **three shots**. Drag back from the ball and release; the direction and length of the drag control the shot. The orange guide previews the start of its path. The ball follows a geodesic, a straight line in hyperbolic space that can curve on screen. Sink it on the **first shot for two stars**, or on the **second or third for one star**.
+3. **Escape the swarm.** Avoid the chasing shadows for **15 seconds**, starting with **three hearts**. Move with **W A S D**, the **arrow keys**, or by holding the floor. Each collision removes a heart. Survive with **all three hearts for two stars**, or with **one or two hearts for one star**. Losing every heart ends the game with no stars.
+4. **Bounce shot.** Hit the gold target within **three shots** while a barrier blocks the direct route. Drag towards where you want to aim from the white ball and release to fire. The orange guide previews the curved path and its bounces off the barrier and arena wall. Hit the target on the **first shot for two stars**, or on the **second or third for one star**.
+5. **Quick puzzle.** Answer **one randomly chosen geometry question** from the four types below. Click your choice or press **1, 2, 3** (or **A, B, C**). A correct answer earns **one star**; an incorrect answer earns none. The game reveals the answer and explains the geometry before you return to the board or choose a prize.
 
-- **Crystal dash.** Fifteen seconds to run about (W A S D, or hold the floor) grabbing crystals. Those near the rim look close and aren't. Quick catches build a combo worth up to three each, and gold crystals are worth three. 32 points for two stars, 14 for one.
-- **Escape the swarm.** Shadows close in, a little slower than you, for fifteen seconds; three hearts. Hyperbolic space opens up so fast that a few steps sideways leave a chaser far behind.
-- **Geodesic golf.** Drag back from the ball and let go to putt. The ball rolls along a true straight line, which bows towards the centre on screen; an orange guide shows how its roll begins. In one for two stars, in three for one. In the tests, aiming straight at the hole on screen misses every time; aiming along the geodesic sinks it.
-- **Bounce shot.** A barrier blocks the way to the target. The shot follows geodesics and bounces off the round arena wall and the barrier, angle in equalling angle out; a guide line shows the true path, bounces and all.
+The four action games are implemented in [`src/arcade.js`](src/arcade.js); the menu and puzzle questions are in [`src/chamber.js`](src/chamber.js).
 
-Moving things step along geodesics: slide the point to the centre, step along the diameter, slide back, and turn the heading by the argument of that map's derivative (`geodesicStep`). A bounce mirrors the heading in the wall's tangent where it hits (`bounce`).
+### Quick puzzle questions
 
-### Quick puzzles
+Choosing **Quick puzzle** randomly selects one of these four questions:
 
-**Closest crystal:**
-
-- You stand off-centre with three crystals that look about equally far away (within ±8% on screen) and about equally big. Pick the one that is **truly** closest.
-- The crystals differ in true size so that they *look* the same size. With equal true sizes the biggest-looking crystal would always be the answer (it sits where space is least stretched), and a round could be won without reading the floor; now it is the answer only about a third of the time.
-- The floor is a tiling of triangles, eight at each corner. Every triangle is the same size in hyperbolic terms, so they shrink towards the rim, and counting tiles is a fair way to judge distance. The crystal that looks nearest is never the answer: space near the rim is much bigger than it looks.
-- After you choose, dashed geodesics (the hyperbolic "straight lines") show each true distance, one dash per half unit, and you walk to the closest crystal while the world flows past and the others sink towards the rim.
-
-**Find the straight line:**
-
-- Three paths lead to a gold crystal: the true geodesic, the Euclidean straight segment, and an arc bent the wrong way or too far. Pick the one that is truly straight, the shortest way there.
-- The segment looks straightest but is longer. In the Poincaré disk geodesics are arcs that would meet the rim at right angles, so they bow towards the centre, where space is least stretched. After you choose, each path is labelled with its true length and you walk the geodesic to the crystal.
-- The round starts with the world sliding you out towards the rim, where geodesics bow enough to see.
-
-**Biggest triangle:** three geodesic triangles look about the same size; the one nearest the rim truly holds far more. After you choose, each is labelled with its area, and the answer's angle sum shows where the area went.
-
-**Where will you end up?** You will walk a square: equal sides, right-angle turns. Pick where you land. One choice is back where you started, the flat-world answer, which is never right; then you walk it for real, leaving a trail.
-
-After a closest-crystal puzzle the three crystals slide to the middle and become a **geodesic triangle**, labelled with its angles. They always add up to less than 180°, and the shortfall is exactly the triangle's area (Gauss–Bonnet). The floor tiles are triangles too, each with three 45° corners.
+| Question | What you do | What the answer reveals |
+| --- | --- | --- |
+| **Closest crystal** | From an off-centre position, choose the crystal with the shortest hyperbolic distance to you. The three crystals look similar in size and distance; use the floor tiles to judge. | Labels and dashed geodesics show the true distances, then the player walks to the closest crystal. Afterwards, the crystals form a triangle whose angles add up to less than 180°. |
+| **Find the straight line** | Choose the shortest of three paths to the gold crystal. A path that curves on screen can be the true straight line. | Each path's true length is shown, and the player follows the correct geodesic to the crystal. |
+| **Biggest triangle** | Choose which of three similarly drawn triangles has the greatest hyperbolic area. | The true areas are shown. The winning triangle's angle sum explains how its area relates to the shortfall from 180°. |
+| **Where will you end up?** | Predict where four equal moves—up, right, down and left, with a 90° turn each time—will leave you. Choose one of the three marked positions. | The walk is animated with a trail and the distance from the start is shown. In hyperbolic space, this route does not bring you back home. |
 
 ## The Hyperbolic Lab
 
@@ -285,7 +274,7 @@ VANTAGE is permanently spotlighted above the crown during normal play. One three
 - [x] Compass of vantage points
 - [x] Four maps
 - [x] Hints, and typing that slides back to end at a hook
-- [x] Four action games and four puzzles in the chamber, played for power-ups
+- [x] Five Chamber choices: four action games and Quick puzzle, with four possible questions, played for power-ups
 - [x] A traveller who walks every word
 - [x] Pass-and-play for up to four
 - [x] A local leaderboard
