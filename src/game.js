@@ -36,7 +36,7 @@ export function createGame(level, board) {
     slots: new Set(board.slots.keys()), // the slots a tile can be placed on
     bonuses: placeBonuses(board, level.seed, (slot) => !letters.has(slot.key)), // slot key -> 'DL' | 'TL' | 'DW' | 'TW'
     letters, // slot key -> letter on the board
-    pending: [], // tiles placed this turn: { slot, letter }
+    pending: [], // tiles placed this turn: { slot, letter, from (rack index) }
     rack: [],
     bag: createBag(level.seed),
     turnsLeft: level.turns,
@@ -89,22 +89,22 @@ export function placeTile(game, key, rackIndex) {
   if (game.turnsLeft <= 0 || !game.slots.has(key) || letterAt(game, key)) return false;
   if (!Number.isInteger(rackIndex) || rackIndex < 0 || rackIndex >= game.rack.length) return false;
   const [letter] = game.rack.splice(rackIndex, 1);
-  game.pending.push({ slot: key, letter });
+  game.pending.push({ slot: key, letter, from: rackIndex });
   return true;
 }
 
-// Takes back the most recently placed tile and returns its slot.
+// Takes back the most recently placed tile, returning it to the spot in the
+// rack it came from, and returns its slot.
 export function undoTile(game) {
   const tile = game.pending.pop();
   if (!tile) return null;
-  game.rack.push(tile.letter);
+  game.rack.splice(Math.min(tile.from ?? game.rack.length, game.rack.length), 0, tile.letter);
   return tile.slot;
 }
 
 export function cancelPending(game) {
   const slots = game.pending.map((tile) => tile.slot);
-  game.rack.push(...game.pending.map((tile) => tile.letter));
-  game.pending = [];
+  while (game.pending.length) undoTile(game);
   return slots;
 }
 
@@ -143,9 +143,15 @@ export function preparePlay(game, chain, viewDir) {
     main = findSpan(game, line);
     if (!main.error) break;
   }
+  let cross = game.pending.map((tile) => crossWord(game, chain, tile.slot, viewDir)).filter(Boolean);
+  // As in Scrabble, a single tile may make its word sideways only: then that
+  // word is the one played.
+  if (main.short && cross.length === 1) {
+    main = { ...cross[0], surfaces: 1 };
+    cross = [];
+  }
   if (main.error) return main;
 
-  const cross = game.pending.map((tile) => crossWord(game, chain, tile.slot, viewDir)).filter(Boolean);
   if (game.letters.size && !main.slots.some((key) => game.letters.has(key)) && !cross.length) {
     return { error: 'Your word must use a letter already on the board.' };
   }
@@ -260,6 +266,6 @@ function findSpan(game, line) {
 
   const slots = line.slots.slice(start, end + 1);
   const word = slots.map((key) => letterAt(game, key)).join('');
-  if (word.length < 2) return { error: 'Words need at least two letters.' };
+  if (word.length < 2) return { error: 'Words need at least two letters.', short: true };
   return { slots, word, surfaces: new Set(line.slotLines.slice(start, end + 1)).size };
 }

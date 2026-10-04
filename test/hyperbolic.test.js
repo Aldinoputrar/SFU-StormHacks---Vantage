@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  IDENTITY,
   abs,
   apply,
   compose,
   distance,
+  drawnRadius,
   generateRound,
+  radiusDrawnAs,
+  polar,
   rotation,
+  stride,
+  triangle,
+  turnAtCentre,
   sub,
   tilingMirror,
   toCentre,
@@ -67,4 +74,75 @@ test('rounds have a clear answer the eye cannot spot', () => {
 test('a round can keep the player where they stand', () => {
   const round = generateRound(mulberry32(3), [0.45, 0.1]);
   assert.deepEqual(round.player, [0.45, 0.1]);
+});
+
+test('a crystal is drawn at the size radiusDrawnAs asks for', () => {
+  for (const r of [0, 0.3, 0.6, 0.85]) close(drawnRadius(r, radiusDrawnAs(r, 0.065)), 0.065);
+});
+
+test('the biggest-looking crystal is not a reliable guide to the answer', () => {
+  const random = mulberry32(7);
+  let biggest = 0;
+  const rounds = 600;
+  for (let i = 0; i < rounds; i++) {
+    const { crystals, radii, answer } = generateRound(random);
+    const looks = crystals.map((z, k) => drawnRadius(abs(z), radii[k]));
+    if (looks.indexOf(Math.max(...looks)) === answer) biggest++;
+  }
+  assert.ok(biggest / rounds < 0.45, `biggest crystal was the answer ${biggest} of ${rounds} times`);
+});
+
+test('a tile of the {3, 8} floor is a triangle with three 45° angles', () => {
+  // Corners of the central tile: cosh R = cot(π/3) cot(π/8).
+  const R = Math.acosh(1 / Math.tan(Math.PI / 3) / Math.tan(Math.PI / 8));
+  const corners = [Math.PI / 3, Math.PI, -Math.PI / 3].map((angle) => polar(Math.tanh(R / 2), angle));
+  const { angles, area } = triangle(...corners);
+  for (const angle of angles) close(angle, Math.PI / 4, 1e-9);
+  close(area, Math.PI / 4, 1e-9);
+});
+
+test('triangles add up to less than 180°, and tiny ones to almost exactly 180°', () => {
+  const random = mulberry32(11);
+  for (let i = 0; i < 100; i++) {
+    const corners = [0, 1, 2].map(() => polar(0.9 * random(), 2 * Math.PI * random()));
+    const { sum, area } = triangle(...corners);
+    assert.ok(sum < Math.PI + 1e-9);
+    assert.ok(area > -1e-9);
+  }
+  const tiny = triangle([0.001, 0], [0, 0.001], [-0.001, -0.0005]);
+  close(tiny.sum, Math.PI, 1e-5);
+});
+
+test('walking a square does not bring you home', () => {
+  // Four equal legs with right-angle turns, all pure translations.
+  let view = IDENTITY;
+  for (let leg = 0; leg < 4; leg++) view = compose(stride((leg * Math.PI) / 2, 1.5), view);
+  const home = apply(view, [0, 0]); // where the starting point is now, seen from the player
+  assert.ok(distance(home, [0, 0]) > 0.5, `ended ${distance(home, [0, 0])} from home`);
+
+  // In a tiny square, almost flat, you do get home.
+  view = IDENTITY;
+  for (let leg = 0; leg < 4; leg++) view = compose(stride((leg * Math.PI) / 2, 0.001), view);
+  assert.ok(distance(apply(view, [0, 0]), [0, 0]) < 1e-5);
+});
+
+test('walking round a closed loop turns you by the area it encloses', () => {
+  // Out along one diameter, round an arc and back: a triangle with corners
+  // at home, A and B. Steps are short so the path follows the triangle.
+  const A = polar(Math.tanh(1.2 / 2), 0);
+  const B = polar(Math.tanh(1.2 / 2), 1.1);
+  let view = IDENTITY;
+  const walkTo = (target) => {
+    for (let k = 0; k < 400; k++) {
+      const here = apply(view, target); // the target, seen from the player
+      const left = distance([0, 0], here);
+      if (left < 1e-9) break;
+      view = compose(stride(Math.atan2(here[1], here[0]), Math.min(left, 0.05)), view);
+    }
+  };
+  walkTo(A);
+  walkTo(B);
+  walkTo([0, 0]);
+  const { area } = triangle([0, 0], A, B);
+  close(Math.abs(turnAtCentre(view)), area, 1e-6);
 });

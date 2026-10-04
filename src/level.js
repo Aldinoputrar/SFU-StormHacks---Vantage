@@ -92,10 +92,12 @@ export const MONUMENT = {
   loops: [CROWN.loop],
   // Letters already on the board: each text runs from start along dir, on
   // the given face of each block, and spaces are left empty. Every joined line
-  // reads from the plaza out along its arm, so the far ends invite words that
-  // finish there: LOVE...ABLE, ...RISE, ...STAR, ...TION.
+  // reads from the plaza out along its arm, and only the far end holds
+  // letters, so the player writes the start of a word on the plaza and, from
+  // the right corner, it runs on into the arm: (LOVE)ABLE, (T)ABLE, (SUN)RISE,
+  // (LODE)STAR, (MO)TION. A word already complete across the gap could never
+  // be extended, so the hooks are left open.
   words: [
-    { start: [1, 0, 1], dir: [1, 0, 0], face: '+y', text: 'LOVE' },
     { start: [6, 1, 2], dir: [1, 0, 0], face: '+y', text: 'ABLE' },
     { start: [2, 1, -6], dir: [0, 0, -1], face: '+y', text: 'RISE' },
     { start: [-6, 1, -2], dir: [-1, 0, 0], face: '+y', text: 'STAR' },

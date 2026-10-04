@@ -4,7 +4,7 @@ Scrabble, if the board were an impossible object.
 
 ## What it is
 
-A single-player word puzzle in two parts. In the **Hyperbolic Chamber** you earn your letters by judging distance in curved space; on the **monument**, an Escher-like structure in the style of Monument Valley, you play them as words along lines that only join up from the right viewpoint.
+A single-player word puzzle in two parts. In the **Hyperbolic Chamber** you earn your letters by judging distance in curved space; on the **monument**, an Escher-like structure in the style of Monument Valley, you play them as words along lines that only join up from the right viewpoint. Between turns, the **Hyperbolic Lab** lets you walk the hyperbolic plane freely and find out for yourself what curvature does.
 
 | Game | What we took from it |
 | --- | --- |
@@ -14,7 +14,7 @@ A single-player word puzzle in two parts. In the **Hyperbolic Chamber** you earn
 
 ## The core idea
 
-The board itself hides opportunities. Two strips of tiles might be far apart in 3D space, but from one viewing angle they line up as a continuous word. LOVE on the plaza and ABLE on a floating arm become LOVEABLE, but only if you find the angle.
+The board itself hides opportunities. Two strips of tiles might be far apart in 3D space, but from one viewing angle they line up as a continuous word. ABLE sits on a floating arm, blocks away from the plaza; type LOVE on the plaza and, from the right angle, it runs on into ABLE as LOVEABLE (or T into TABLE, UN into UNABLE).
 
 An orthographic camera lets surfaces at different depths appear to touch without perspective foreshortening. What counts as adjacent depends on your viewpoint, so finding the right place to look is part of solving the puzzle.
 
@@ -25,20 +25,35 @@ Every face of every block can hold letters: tops, sides and undersides. Each fac
 One connected monument: a sand plaza (a 5×5 Scrabble board on top), a lavender tower in the middle, a coral Penrose crown resting on the tower, and four mint arms in a pinwheel.
 
 - **Four views, like Monument Valley's rotations.** Vantage points are the four isometric views from above. Each arm's far end is shifted one step along one of those view directions, so each arm only joins the plaza, and its words only connect, from one corner. From anywhere else it is a broken bridge.
-- **Hook words.** Lines read from the plaza out along each arm, and the far ends invite words that finish there: LOVE…ABLE, …RISE (SUNRISE), …STAR, …TION.
+- **Hook words.** Lines read from the plaza out along each arm, and only the far ends hold letters: …ABLE (LOVEABLE, TABLE), …RISE (SUNRISE), …STAR (LODESTAR), …TION (MOTION). The start of each line is left empty, because a word already complete across the gap could never be extended.
 - **The Penrose crown.** Four strips around a square, each lifted a different amount along the home view (1, 1, 1). From that view the lifts vanish and the strips close into one ring of 12 tiles with no start and no end, so a word can run round a corner and past any point. Orbit away and it opens into a staircase that climbs at three corners yet returns to where it started. One side rests on the tower, so the crown is part of the monument.
-- **Reveal the trick** swings the camera away from a vantage point and back, with dashed lines across every hidden gap.
+- **Reveal the trick** swings the camera away from a vantage point and back, with dashed bars across every hidden gap.
+- **The compass** (bottom right) maps every view direction from above: the centre is straight down, the ring is the horizon, the four dots are the vantage points and the orange dot is you. Click a dot to fly there.
 
 ## The Hyperbolic Chamber
 
 Before each turn you earn letters in a short minigame (about 30 seconds) set in the Poincaré disk, a model of the infinite hyperbolic plane drawn inside a circle.
 
-- You stand off-centre with three crystals that look about equally far away (within ±8% on screen). Pick the one that is **truly** closest.
+- You stand off-centre with three crystals that look about equally far away (within ±8% on screen) and about equally big. Pick the one that is **truly** closest.
+- The crystals differ in true size so that they *look* the same size. With equal true sizes the biggest-looking crystal would always be the answer (it sits where space is least stretched), and a round could be won without reading the floor; now it is the answer only about a third of the time.
 - The floor is a tiling of triangles, eight at each corner. Every triangle is the same size in hyperbolic terms, so they shrink towards the rim, and counting tiles is a fair way to judge distance. The crystal that looks nearest is never the answer: space near the rim is much bigger than it looks.
 - After you choose, dashed geodesics (the hyperbolic "straight lines") show each true distance, one dash per half unit, and you walk to the closest crystal while the world flows past and the others sink towards the rim.
 - Three rounds per visit. Each correct answer improves your letters: every new tile is the best of (correct answers + 1) draws from the bag, favouring vowels when your rack is short of them, then high-scoring letters.
+- After the last round the three crystals slide to the middle and become a **geodesic triangle**, labelled with its angles. They always add up to less than 180°, and the shortfall is exactly the triangle's area (Gauss–Bonnet). The floor tiles are triangles too, each with three 45° corners.
+- From the second visit on you can skip the chamber for a plain draw.
 
 You visit the chamber at the start, after every word, and after a swap. The rack always holds at most seven tiles.
+
+## The Hyperbolic Lab
+
+A sandbox on the same hyperbolic floor, open from the title screen or between turns. You are always at the centre of the disk and the plane slides past you, one pure translation at a time, so you never turn. Even so:
+
+- **A square does not close.** *Walk a square for me* walks 1.5 up, 1.5 right, 1.5 down and 1.5 left, turning 90° each time. You end up nearly 3 units from home: in hyperbolic space a four-sided figure with equal sides needs corners sharper than 90° to close.
+- **Triangles come up short.** Click three points to drop a triangle; its angles are labelled live and add up to less than 180°, the missing angle being its area. Small triangles are almost flat; huge ones have angles near 0°.
+- **Walking a loop turns the world.** A red arrow is painted at home pointing north. Walk any big loop back to the star and the arrow points somewhere else, turned by exactly the area your loop enclosed (holonomy). The lab reads off the angle and the area.
+- **The rim never gets closer.** Walk towards the edge as long as you like; it recedes, because it is infinitely far away.
+
+Controls: <kbd>W A S D</kbd> or arrow keys to walk, hold the floor to walk towards the pointer, click to drop a triangle corner, <kbd>Esc</kbd> to leave.
 
 ## How to play
 
@@ -95,7 +110,11 @@ Run `npm run vantages` to list every vantage point in a level and the strips tha
 
 - **Distance:** d(p, q) = arcosh(1 + 2|p − q|² / ((1 − |p|²)(1 − |q|²))). Near the rim the denominator vanishes, which is why the rim is so far away.
 - **Isometries** are Möbius transformations z ↦ (az + b)/(cz + d). The camera is one of them, so walking means composing a hyperbolic translation along the geodesic to the crystal, and the shader maps each pixel back through the inverse.
-- **The tiling** is drawn per pixel by reflecting the point into one triangle of a {3, 8} tiling (two straight mirrors and one circle orthogonal to the rim, found from cosh(centre to edge) = cos(π/q) / sin(π/p)); the parity of the reflections two-colours the tiles ([`src/chamber.js`](src/chamber.js)).
+- **The tiling** is drawn per pixel by reflecting the point into one triangle of a {3, 8} tiling (two straight mirrors and one circle orthogonal to the rim, found from cosh(centre to edge) = cos(π/q) / sin(π/p)); the parity of the reflections two-colours the tiles ([`src/disk.js`](src/disk.js)).
+- **Geodesics** are drawn per pixel too: each segment's start is slid to the centre by a Möbius map, where the geodesic is a straight diameter, so a pixel is on the segment when it lies close to that diameter.
+- **Crystal sizes.** A hyperbolic disk of radius ρ centred at Euclidean distance a from the centre is drawn with Euclidean radius b(1 − a²) / (1 − a²b²), where b = tanh(ρ/2). Solving the quadratic e·a²·b² + (1 − a²)·b − e = 0 for b gives the true radius that looks like any chosen size e (`radiusDrawnAs`).
+- **Angles** at a corner p are measured by sliding p to the centre: Möbius maps keep angles, and the two geodesics become diameters, so the angle is the ordinary angle between two vectors (`angleAt`). By Gauss–Bonnet with curvature −1, a triangle's area is π minus its angle sum (`triangle`).
+- **Walking** in the lab is a pure translation along a diameter, z ↦ (z − s) / (1 − s̄z) with |s| = tanh(step/2) (`stride`), so the player never rotates. After a closed loop the accumulated map fixes the centre and is a rotation; its angle, the argument of the derivative (ad − bc)/d² at the centre (`turnAtCentre`), equals the enclosed area. The tests check this to within 10⁻⁶ by walking a triangle and comparing with Gauss–Bonnet ([`test/hyperbolic.test.js`](test/hyperbolic.test.js)).
 
 ## Why impossible geometry?
 
@@ -104,6 +123,7 @@ The structure takes inspiration from Penrose stairs, Escher's Waterfall and Monu
 ## Stack
 
 - [Three.js](https://threejs.org/) for 3D graphics and the chamber's shader
+- The Web Audio API for every sound: soft bells on a pentatonic scale, synthesised in [`src/audio.js`](src/audio.js), so there are no audio files
 - Vite for development, builds and the dictionary proxy
 - Node's built-in test runner
 
@@ -114,7 +134,7 @@ npm install
 npm run dev
 ```
 
-Open the printed local URL. You start in the Hyperbolic Chamber; collect your letters, then press **Isometric view** to see LOVE and ABLE line up as LOVEABLE.
+Open the printed local URL and press **Play**. You start in the Hyperbolic Chamber; collect your letters, then press **Isometric view** to see the empty plaza row run straight into ABLE on its floating arm. Click the glowing tile just before A and type a T: TABLE scores twice, once for each surface. Or open **Explore the Hyperbolic Lab** and press **Walk a square for me**.
 
 To check words with Merriam-Webster, the server must be able to reach `scrabble.merriam.com`. If it can't (offline, or a network that blocks the site), the game still works with the offline list.
 
@@ -127,6 +147,7 @@ npm run build     # production build in dist/
 ### Controls
 
 - **Chamber:** click a crystal (or press 1, 2, 3 or A, B, C).
+- **Lab:** W A S D or arrow keys to walk, hold the floor to walk towards it, click to drop triangle corners.
 - **Drag** to orbit, **scroll** to zoom. The game starts in an overhead view; **Overhead view** returns to it and **Isometric view** jumps to the home vantage point. Let go near a vantage point and the camera snaps to it; joined lines glow.
 - **Click a tile** to lock the view and pick the line through it. Click the same tile again, or the switch button, to change to the other line through it.
 - **Choose your direction.** The heading shows Across, Down or Diagonal before you type. Across is chosen first where lines cross; the switch button names the other direction.
@@ -144,8 +165,11 @@ npm run build     # production build in dist/
 | [`src/game.js`](src/game.js) | Rules: rack, placing, connecting, cross-words, scoring, swap, end of run |
 | [`src/bonuses.js`](src/bonuses.js) | Where the DL / TL / DW / TW squares go |
 | [`src/dictionary.js`](src/dictionary.js) | Merriam-Webster lookups with the offline fallback |
-| [`src/hyperbolic.js`](src/hyperbolic.js) | Poincaré disk maths and chamber rounds |
+| [`src/hyperbolic.js`](src/hyperbolic.js) | Poincaré disk maths: distance, Möbius maps, triangles, walking, chamber rounds |
+| [`src/disk.js`](src/disk.js) | The shared Poincaré disk renderer: tiling, geodesics and markers in one shader |
 | [`src/chamber.js`](src/chamber.js) | The Hyperbolic Chamber screen |
+| [`src/lab.js`](src/lab.js) | The Hyperbolic Lab: free walking, triangles, the square walk and holonomy |
+| [`src/audio.js`](src/audio.js) | Synthesised sound |
 | [`src/scene.js`](src/scene.js) | Drawing the monument and its tiles |
 | [`src/placement.js`](src/placement.js) | Which line a click picks first, and its direction on screen (Across, Down, Diagonal) |
 | [`src/hud.js`](src/hud.js), [`src/style.css`](src/style.css), [`index.html`](index.html) | The interface |
@@ -162,6 +186,8 @@ npm run build     # production build in dist/
 - [x] Checking words with Merriam-Webster and scoring
 - [x] Bonus squares (DL, TL, DW, TW)
 - [x] Hyperbolic Chamber minigame that earns letters
-- [ ] Title screen, tutorial and end screen
-- [ ] Sound
+- [x] Title screen, first-turn guidance and end screen
+- [x] Sound
+- [x] Hyperbolic Lab: free walking, triangles and holonomy
+- [x] Compass of vantage points
 - [ ] Leaderboard

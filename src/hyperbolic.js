@@ -61,6 +61,40 @@ export function walk(from, to, t) {
   return compose(invert(toCentre(from)), compose(toCentre(step), toCentre(from)));
 }
 
+// The angle at p between the geodesics to q and to r. Sliding p to the centre
+// keeps angles (Möbius maps are conformal) and turns both geodesics into
+// straight diameters, so it is the ordinary angle between two vectors there.
+export function angleAt(p, q, r) {
+  const centred = toCentre(p);
+  const u = apply(centred, q);
+  const v = apply(centred, r);
+  const cos = (u[0] * v[0] + u[1] * v[1]) / (abs(u) * abs(v));
+  return Math.acos(Math.min(1, Math.max(-1, cos)));
+}
+
+// A geodesic triangle's angles. In a flat plane they add up to π; in the
+// hyperbolic plane (curvature -1) they add up to less, and by Gauss-Bonnet the
+// shortfall is exactly the triangle's area.
+export function triangle(p, q, r) {
+  const angles = [angleAt(p, q, r), angleAt(q, r, p), angleAt(r, p, q)];
+  const sum = angles[0] + angles[1] + angles[2];
+  return { angles, sum, area: Math.PI - sum };
+}
+
+// One step of walking for a player at the centre: the world slides so the
+// point `length` away in direction `heading` comes to the centre. It is a pure
+// translation along a diameter, so the player never turns.
+export function stride(heading, length) {
+  return toCentre(polar(Math.tanh(length / 2), heading));
+}
+
+// How far an isometry turns things at the centre, in radians: the argument of
+// its derivative there, (ad - bc) / d².
+export function turnAtCentre([a, b, c, d]) {
+  const slope = div(sub(mul(a, d), mul(b, c)), mul(d, d));
+  return Math.atan2(slope[1], slope[0]);
+}
+
 // The mirror circle of a regular {p, q} tiling (p-gons, q meeting at each
 // corner): it carries the central tile's edge whose midpoint lies on the
 // positive real axis. From the right-angled triangle with angles π/p and π/q,
@@ -70,11 +104,36 @@ export function tilingMirror(p, q) {
   return { centre: (1 + s * s) / (2 * s), radius: (1 - s * s) / (2 * s) };
 }
 
+// How big a crystal looks on screen, in disk units, when its round starts.
+export const CRYSTAL_LOOK = 0.065;
+
+// A hyperbolic disk of radius ρ centred at Euclidean distance r from the
+// centre is drawn as a Euclidean disk. With a = r and b = tanh(ρ/2), its ends
+// on the ray through the centre sit at (a ± b) / (1 ± ab), so its drawn
+// radius is b(1 - a²) / (1 - a²b²).
+export function drawnRadius(r, rho) {
+  const b = Math.tanh(rho / 2);
+  return (b * (1 - r * r)) / (1 - r * r * b * b);
+}
+
+// The hyperbolic radius that is drawn as Euclidean radius e at distance r
+// from the centre: the positive root of e·a²·b² + (1 - a²)·b - e = 0.
+export function radiusDrawnAs(r, e) {
+  const a2 = r * r;
+  const b = a2 < 1e-12 ? e : (Math.sqrt((1 - a2) ** 2 + 4 * e * e * a2) - (1 - a2)) / (2 * e * a2);
+  return 2 * Math.atanh(b);
+}
+
 // A round of the chamber, in screen coordinates: the player, and three
 // crystals that look about equally far away (within ±8% on screen) but are
 // not equally far in hyperbolic distance. The one that looks nearest is never
 // the answer, so the eye alone cannot win; the truly nearest is clearly
 // nearer than the rest.
+//
+// Crystals come in different true sizes, chosen so they all look about the
+// same size when the round starts. Otherwise the biggest-looking crystal
+// would always be the answer (it sits where space is least stretched), and
+// the round could be won without reading the tiling.
 export function generateRound(random = Math.random, player = null) {
   for (let attempt = 0; attempt < 1000; attempt++) {
     const at = player ?? polar(0.36 + 0.2 * random(), 2 * Math.PI * random());
@@ -91,7 +150,8 @@ export function generateRound(random = Math.random, player = null) {
     const answer = ranked[0];
     if (distances[ranked[1]] < 1.2 * distances[answer]) continue;
     if (looks.indexOf(Math.min(...looks)) === answer) continue;
-    return { player: at, crystals, distances, answer };
+    const radii = crystals.map((z) => radiusDrawnAs(abs(z), CRYSTAL_LOOK * (0.88 + 0.24 * random())));
+    return { player: at, crystals, radii, distances, answer };
   }
   throw new Error('Could not lay out a chamber round');
 }

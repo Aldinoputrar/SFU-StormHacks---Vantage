@@ -19,8 +19,8 @@ const tint = (color, toward, amount) => `#${new THREE.Color(color).lerp(new THRE
 // Bonus squares, coloured as on a Scrabble board.
 const BONUS_COLORS = { DL: '#5ba4d6', TL: '#1f6f9f', DW: '#ec9c9c', TW: '#d1495b' };
 const GLOW = {
-  aligned: { color: new THREE.Color('#1fbfae'), base: 0.4, pulse: 0.2, speed: 3 },
-  selected: { color: new THREE.Color('#ffae00'), base: 0.15, pulse: 0, speed: 0 },
+  aligned: { color: new THREE.Color('#1fbfae'), base: 0.5, pulse: 0.25, speed: 3 },
+  selected: { color: new THREE.Color('#ffae00'), base: 0.32, pulse: 0, speed: 0 },
   cursor: { color: new THREE.Color('#ff8a00'), base: 0.55, pulse: 0.3, speed: 6 },
 };
 

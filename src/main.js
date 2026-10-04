@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import wordsUrl from '../node_modules/word-list/words.txt?url';
+import { createSound } from './audio.js';
 import { buildBoard, chainsForView, isJoined, nearestVantage } from './board.js';
 import { BONUS_KINDS } from './bonuses.js';
+import { normalize, screenBasis } from './geometry.js';
 import { createChamber } from './chamber.js';
 import { createDictionary, createWordChecker } from './dictionary.js';
 import {
@@ -20,6 +22,7 @@ import {
   undoTile,
 } from './game.js';
 import { createHud } from './hud.js';
+import { createLab } from './lab.js';
 import { MONUMENT, VIEWS } from './level.js';
 import { placementDirection, placementOptions } from './placement.js';
 import { BoardView } from './scene.js';
@@ -31,11 +34,18 @@ const SNAP_MS = 350;
 // while ledges stay horizontal on screen. The run starts here.
 const OVERHEAD = [0.003, 1, 0.3];
 const REVEAL_TURN = THREE.MathUtils.degToRad(40); // how far reveal swings the camera
-const REVEAL_HOLD_MS = 1200;
+const REVEAL_HOLD_MS = 2000;
+// Behind the title screen the monument turns slowly, flashing as it passes
+// each vantage point.
+const INTRO_VIEW = [1, 0.75, 0.25];
+const INTRO_SPIN = 0.09; // radians per second
 
 const board = buildBoard(MONUMENT);
 const game = createGame(MONUMENT, board);
-const chamber = createChamber();
+const sound = createSound();
+const chamber = createChamber({ sound });
+const lab = createLab({ sound });
+const chamberStats = { right: 0, rounds: 0 };
 // Merriam-Webster first; the offline list only loads if it is needed.
 const words = createWordChecker({
   loadOffline: () =>
@@ -69,13 +79,28 @@ const bounds = new THREE.Box3();
 for (const cell of board.cells) bounds.expandByPoint(new THREE.Vector3(...cell));
 const target = bounds.getCenter(new THREE.Vector3());
 const viewHeight = bounds.getSize(new THREE.Vector3()).length() * 0.85;
+// The widest the monument gets on screen, from any of the views the buttons
+// and snapping use, measured either side of the orbit target.
+const viewWidth = Math.max(
+  ...[...Object.values(VIEWS), OVERHEAD].map((dir) => {
+    const { right } = screenBasis(normalize(dir));
+    let half = 0;
+    for (const cell of board.cells) {
+      for (const corner of [-0.5, 0.5].flatMap((x) => [-0.5, 0.5].flatMap((y) => [-0.5, 0.5].map((z) => [x, y, z])))) {
+        const offset = new THREE.Vector3(...cell).add(new THREE.Vector3(...corner)).sub(target);
+        half = Math.max(half, Math.abs(offset.dot(new THREE.Vector3(...right))));
+      }
+    }
+    return 2 * half;
+  }),
+);
 
 // Orthographic, so things at different depths can appear to touch.
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -200, 200);
 function resize() {
   const aspect = window.innerWidth / window.innerHeight;
-  // In portrait the monument's width is what has to fit.
-  const height = aspect < 1 ? (0.8 * viewHeight) / aspect : viewHeight;
+  // On narrow screens the monument's width is what has to fit.
+  const height = Math.max(viewHeight, viewWidth / (0.94 * aspect));
   camera.left = (-height * aspect) / 2;
   camera.right = (height * aspect) / 2;
   camera.top = height / 2;
@@ -90,16 +115,21 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.copy(target);
 controls.minZoom = 0.6;
 controls.maxZoom = 4;
-// Start overhead, away from every vantage point, so the player has to find them.
-camera.position.copy(target).add(new THREE.Vector3(...OVERHEAD).setLength(40));
+controls.enabled = false;
+// The title screen turns the monument slowly; the run itself starts overhead,
+// away from every vantage point, so the player has to find them.
+camera.position.copy(target).add(new THREE.Vector3(...INTRO_VIEW).setLength(40));
 controls.update();
 
 // Measured from the orbit target, which moves when the player pans.
 const viewDir = () => camera.position.clone().sub(controls.target).normalize().toArray();
 
-// 'chamber': earning letters · 'explore': orbiting · 'placing': view locked,
-// typing a word · 'checking': asking the dictionary · 'over': run finished
-let mode = 'explore';
+// 'intro': title screen · 'chamber': earning letters · 'explore': orbiting ·
+// 'placing': view locked, typing a word · 'checking': asking the dictionary ·
+// 'over': run finished
+let mode = 'intro';
+let labOpen = false;
+let summaryShown = false;
 let current = chainsForView(board, viewDir()); // every line, as seen from the camera
 let selection = null; // { chain, cursor, clicked } while placing
 let lockedDir = null;
@@ -107,8 +137,10 @@ let snap = null;
 let revealing = false; // showing how far apart joined strips really are
 let message = null;
 let messageTimer;
-// The camera is moving, the chamber is open or words are being checked.
-const busy = () => Boolean(snap || revealing) || mode === 'chamber' || mode === 'checking';
+// The camera is moving, a screen is over the monument or words are being
+// checked.
+const busy = () =>
+  Boolean(snap || revealing) || labOpen || mode === 'intro' || mode === 'chamber' || mode === 'checking';
 const canLook = () => !busy() && (mode === 'explore' || mode === 'over');
 
 const hud = createHud({
@@ -127,18 +159,19 @@ const hud = createHud({
   onFinish: finish,
 });
 
-// Dashed lines across each hidden gap, drawn while revealing.
+// Dashed bars across each hidden gap, drawn while revealing. WebGL lines are
+// always one pixel wide, so the dashes are thin boxes instead.
 const ghosts = new THREE.Group();
 scene.add(ghosts);
-const ghostMaterial = new THREE.LineDashedMaterial({
-  color: '#1fbfae',
-  dashSize: 0.25,
-  gapSize: 0.15,
-  depthTest: false,
-});
+const GHOST_DASH = 0.28;
+const GHOST_GAP = 0.16;
+const ghostMaterial = new THREE.MeshBasicMaterial({ color: '#12a99a', depthTest: false, transparent: true });
+const ghostDash = new THREE.BoxGeometry(0.09, 1, 0.09);
+const ghostEnd = new THREE.SphereGeometry(0.13, 16, 12);
 
 function setMessage(text, tone = 'info', ms = 5000) {
   message = { text, tone };
+  if (tone === 'error') sound.error();
   clearTimeout(messageTimer);
   if (ms) {
     messageTimer = setTimeout(() => {
@@ -149,9 +182,14 @@ function setMessage(text, tone = 'info', ms = 5000) {
   renderHud();
 }
 
+let wasJoined = false;
 function refresh() {
   if (mode !== 'placing' && mode !== 'checking' && !revealing) current = chainsForView(board, viewDir());
   view.orientLetters(camera);
+  // A chime as strips come together.
+  const joinedNow = current.chains.some(isJoined);
+  if (joinedNow && !wasJoined && (mode === 'explore' || mode === 'over') && !revealing) sound.snap();
+  wasJoined = joinedNow;
 
   const highlights = new Map();
   for (const chain of current.chains.filter(isJoined)) {
@@ -163,7 +201,9 @@ function refresh() {
     if (cursor) highlights.set(cursor, 'cursor');
   }
   view.setHighlights(highlights);
+  drawCompass();
   renderHud();
+  if (mode === 'over' && !summaryShown && !busy()) showSummary();
 }
 
 function renderHud() {
@@ -181,8 +221,8 @@ function renderHud() {
     const best = played.reduce((top, turn) => (turn.points.total > (top?.points.total ?? -1) ? turn : top), null);
     headline = `Run complete: ${game.score} points`;
     hint = best
-      ? `${played.length} word${played.length > 1 ? 's' : ''}, best ${best.word} for ${best.points.total}. Reload to play again.`
-      : 'No words this time. Reload to play again.';
+      ? `${played.length} word${played.length > 1 ? 's' : ''}, best ${best.word} for ${best.points.total}. Orbit as long as you like.`
+      : 'No words this time. Orbit as long as you like.';
   } else if ((mode === 'placing' || mode === 'checking') && selection) {
     const { chain } = selection;
     const surfaces = new Set(chain.slotLines).size;
@@ -214,9 +254,17 @@ function renderHud() {
       headline = `Vantage point! ${joined.length} line${joined.length > 1 ? 's' : ''} joined`;
       if (loops) headline += ' + an endless loop';
       hint = 'Click a glowing tile to play along it · Words must use a letter already on the board';
+      // The first turn, from the home view: point at the illusion itself.
+      const home = joined.find((chain) => chain.slots.map((key) => letterAt(game, key) || '.').join('') === '.......ABLE');
+      if (!game.history.length && home) {
+        hint =
+          'ABLE floats blocks away, yet from here the plaza row runs straight into it. Click the glowing tile just before A and type T, C or S (or start four back for LOVE).';
+      }
     } else {
       headline = near && near.angle < HINT_ANGLE ? 'Something lines up nearby…' : 'Find where the strips line up';
-      hint = 'Drag to orbit · Click any tile to start a word';
+      hint = !game.history.length
+        ? 'Drag to orbit until two strips meet, or press Isometric view · The compass shows where to look'
+        : 'Drag to orbit · Click any tile to start a word';
     }
   }
 
@@ -243,6 +291,45 @@ function renderHud() {
     pattern,
     message,
   });
+  document.getElementById('lab-open').disabled = !canLook();
+}
+
+// The compass: every view direction seen from above, the centre straight down
+// and the ring the horizon (distance from the centre is the angle from
+// straight down). Each vantage point is a dot to click; the camera is the
+// orange dot, so the player can see which way to orbit.
+const COMPASS_RADIUS = 40;
+const compassVantages = document.getElementById('compass-vantages');
+const compassYou = document.getElementById('compass-you');
+const compassPoint = (dir) => {
+  const [x, y, z] = normalize(dir);
+  const r = (COMPASS_RADIUS * Math.acos(Math.max(-1, Math.min(1, y)))) / (Math.PI / 2);
+  const flat = Math.hypot(x, z) || 1;
+  return [(r * x) / flat, (r * z) / flat];
+};
+const compassDots = board.vantages.map((vantage) => {
+  const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  const [cx, cy] = compassPoint(vantage.dir);
+  dot.setAttribute('cx', cx);
+  dot.setAttribute('cy', cy);
+  dot.setAttribute('r', 6);
+  dot.setAttribute('class', 'vantage');
+  dot.addEventListener('click', () => canLook() && animateTo(vantage.dir));
+  compassVantages.append(dot);
+  return { dot, vantage };
+});
+
+function drawCompass() {
+  const dir = viewDir();
+  const [cx, cy] = compassPoint(dir);
+  compassYou.setAttribute('cx', cx);
+  compassYou.setAttribute('cy', cy);
+  const near = nearestVantage(board, dir);
+  for (const { dot, vantage } of compassDots) {
+    const here = near?.vantage === vantage && current.chains.some(isJoined);
+    dot.classList.toggle('here', here);
+    dot.classList.toggle('near', !here && near?.vantage === vantage && near.angle < HINT_ANGLE);
+  }
 }
 
 // Swings the camera around the target to look from dir.
@@ -294,12 +381,17 @@ controls.addEventListener('end', () => {
 
 // The Hyperbolic Chamber fills the rack: the better the score there, the
 // better the letters (each new tile is the best of score + 1 draws).
+// After the first visit the chamber can be skipped, for a plain draw.
 async function earnLetters(title) {
   if (!game.bag.length || game.rack.length >= RACK_SIZE) return;
   mode = 'chamber';
   controls.enabled = false;
   renderHud();
-  const score = await chamber.play({ title });
+  const { score, skipped } = await chamber.play({ title, skippable: chamberStats.rounds > 0 });
+  if (!skipped) {
+    chamberStats.right += score;
+    chamberStats.rounds += 3;
+  }
   const drawn = refillRack(game, score + 1);
   mode = isOver(game) ? 'over' : 'explore';
   controls.enabled = true;
@@ -313,6 +405,7 @@ function reveal() {
   const joined = current.chains.filter(isJoined);
   if (!canLook() || !joined.length) return;
   revealing = true;
+  sound.reveal();
   for (const chain of joined) drawGhosts(chain);
   const home = viewDir();
   const away = new THREE.Vector3(...home).applyAxisAngle(new THREE.Vector3(0, 1, 0), REVEAL_TURN).toArray();
@@ -321,8 +414,7 @@ function reveal() {
       () =>
         animateTo(home, () => {
           revealing = false;
-          for (const ghost of ghosts.children) ghost.geometry.dispose();
-          ghosts.clear();
+          ghosts.clear(); // the dash and dot geometries are shared and kept
           controls.enabled = mode === 'explore' || mode === 'over';
           refresh();
         }),
@@ -337,14 +429,28 @@ function drawGhosts(chain) {
   for (let i = 0; i < (chain.cyclic ? n : n - 1); i++) {
     const j = (i + 1) % n;
     if (chain.slotLines[i] === chain.slotLines[j]) continue;
-    const ends = [chain.slots[i], chain.slots[j]].map((key) => {
+    const [from, to] = [chain.slots[i], chain.slots[j]].map((key) => {
       const slot = board.slots.get(key);
-      return new THREE.Vector3(...slot.center).addScaledVector(new THREE.Vector3(...slot.normal), 0.1);
+      return new THREE.Vector3(...slot.center).addScaledVector(new THREE.Vector3(...slot.normal), 0.12);
     });
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(ends), ghostMaterial);
-    line.computeLineDistances();
-    line.renderOrder = 1;
-    ghosts.add(line);
+    const along = to.clone().sub(from);
+    const gap = along.length();
+    const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.clone().normalize());
+    for (let s = 0; s < gap; s += GHOST_DASH + GHOST_GAP) {
+      const size = Math.min(GHOST_DASH, gap - s);
+      const dash = new THREE.Mesh(ghostDash, ghostMaterial);
+      dash.position.copy(from).addScaledVector(along, (s + size / 2) / gap);
+      dash.quaternion.copy(turn);
+      dash.scale.y = size;
+      dash.renderOrder = 2;
+      ghosts.add(dash);
+    }
+    for (const end of [from, to]) {
+      const dot = new THREE.Mesh(ghostEnd, ghostMaterial);
+      dot.position.copy(end);
+      dot.renderOrder = 2;
+      ghosts.add(dot);
+    }
   }
 }
 
@@ -433,6 +539,7 @@ function placeFromRack(index) {
   const key = selection.chain.slots[at];
   const letter = game.rack[index];
   if (!placeTile(game, key, index)) return;
+  sound.place(game.pending.length - 1);
   view.setTile(key, letter, 'pending');
   const next = nextEmpty(at + 1);
   selection.cursor = next === -1 ? selection.chain.slots.length : next;
@@ -449,6 +556,7 @@ function undo() {
   if (mode !== 'placing' || busy()) return;
   const key = undoTile(game);
   if (!key) return;
+  sound.undo();
   view.setTile(key, '', 'empty');
   if (selection) selection.cursor = selection.chain.slots.indexOf(key);
   refresh();
@@ -484,6 +592,7 @@ async function play() {
 
   const { word, placed, points } = commitPlay(game, prepared);
   for (const tile of placed) view.setTile(tile.slot, tile.letter, 'fixed');
+  sound.word(points.total);
   const sources = [...new Set(results.map((result) => result.source))].join(' + ');
   setMessage(`${word}: ${describePoints(points)} · checked with ${sources}`, 'success', 7000);
   exitPlacing();
@@ -571,16 +680,110 @@ window.addEventListener('keydown', (event) => {
   event.preventDefault();
 });
 
+// The end of a run: the score, every word and how the chamber went.
+function showSummary() {
+  summaryShown = true;
+  sound.finish();
+  const played = game.history.filter((turn) => turn.type === 'word');
+  const best = played.reduce((top, turn) => (turn.points.total > (top?.points.total ?? -1) ? turn : top), null);
+  const joined = played.filter((turn) => turn.points.surfaces > 1).length;
+  document.getElementById('summary-points').textContent = game.score;
+  const stats = [
+    ['Words', played.length],
+    ['Across the illusion', joined],
+    ['Crystals found', chamberStats.rounds ? `${chamberStats.right} of ${chamberStats.rounds}` : '—'],
+  ];
+  document.getElementById('summary-stats').replaceChildren(
+    ...stats.map(([label, value]) => {
+      const item = document.createElement('div');
+      item.innerHTML = '<dt></dt><dd></dd>';
+      item.querySelector('dt').textContent = label;
+      item.querySelector('dd').textContent = value;
+      return item;
+    }),
+  );
+  document.getElementById('summary-words').replaceChildren(
+    ...(played.length ? played : [null]).map((turn) => {
+      const item = document.createElement('li');
+      if (!turn) {
+        item.textContent = 'No words this time. The strips are still waiting to meet.';
+        return item;
+      }
+      item.classList.toggle('best', turn === best);
+      const detail = turn.points.surfaces > 1 ? ` · ${turn.points.surfaces} surfaces` : '';
+      item.innerHTML = '<span class="word"></span><span class="detail"></span>';
+      item.querySelector('.word').textContent = turn.word;
+      item.querySelector('.detail').textContent = `${turn.points.total} pts${detail}`;
+      return item;
+    }),
+  );
+  document.getElementById('summary').hidden = false;
+}
+
+document.getElementById('summary-again').addEventListener('click', () => window.location.reload());
+document.getElementById('summary-look').addEventListener('click', () => {
+  document.getElementById('summary').hidden = true;
+});
+
+// The Hyperbolic Lab can be opened from the title screen or between turns.
+async function openLab() {
+  if (labOpen || (mode !== 'intro' && !canLook())) return;
+  sound.unlock();
+  labOpen = true;
+  const intro = document.getElementById('intro');
+  const fromIntro = !intro.hidden;
+  intro.hidden = true;
+  controls.enabled = false;
+  renderHud();
+  await lab.open();
+  labOpen = false;
+  intro.hidden = !fromIntro;
+  controls.enabled = mode === 'explore' || mode === 'over';
+  refresh();
+}
+document.getElementById('lab-open').addEventListener('click', openLab);
+document.getElementById('intro-lab').addEventListener('click', openLab);
+
+document.body.classList.add('intro');
+document.getElementById('intro-play').addEventListener('click', () => {
+  sound.unlock();
+  document.getElementById('intro').hidden = true;
+  document.body.classList.remove('intro');
+  mode = 'explore';
+  animateTo(OVERHEAD, () => earnLetters('Earn your first letters'));
+});
+
+const muteButton = document.getElementById('mute');
+const showMute = () => {
+  muteButton.textContent = sound.muted ? 'Sound off' : 'Sound on';
+  muteButton.setAttribute('aria-pressed', String(sound.muted));
+};
+muteButton.addEventListener('click', () => {
+  sound.unlock();
+  sound.toggleMute();
+  showMute();
+});
+showMute();
+// Any interaction may start the audio; browsers refuse it before one.
+window.addEventListener('pointerdown', () => sound.unlock(), { once: true });
+
 refresh();
 let frame = 0;
+let lastTime = 0;
 renderer.setAnimationLoop((time) => {
-  // While the chamber has the screen, the monument behind it barely moves.
-  if (chamber.isOpen() && frame++ % 20) return;
+  const dt = Math.min(0.05, (time - (lastTime || time)) / 1000);
+  lastTime = time;
+  // While another screen has the page, the monument behind it barely moves.
+  if ((chamber.isOpen() || lab.isOpen()) && frame++ % 20) return;
+  if (mode === 'intro' && !labOpen) {
+    // Orbit controls report the change, which refreshes the glow.
+    camera.position.sub(controls.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), INTRO_SPIN * dt).add(controls.target);
+    controls.update();
+  }
   if (snap) stepSnap(performance.now());
   view.animate(time / 1000);
   renderer.render(scene, camera);
 });
-earnLetters('Earn your first letters');
 
 // Lets browser tests find tiles on screen.
 if (import.meta.env.DEV) {

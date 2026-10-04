@@ -5,6 +5,7 @@ import { buildBoard, chainsForView, isJoined, slotKey } from '../src/board.js';
 import { createDictionary } from '../src/dictionary.js';
 import {
   BINGO,
+  cancelPending,
   RACK_SIZE,
   commitPlay,
   createGame,
@@ -16,6 +17,7 @@ import {
   preparePlay,
   refillRack,
   swapRack,
+  undoTile,
 } from '../src/game.js';
 import { normalize, rayHitsVoxel } from '../src/geometry.js';
 import { MONUMENT, VIEWS } from '../src/level.js';
@@ -31,6 +33,12 @@ function freshGame(rack) {
   const game = createGame(MONUMENT, board);
   game.bonuses = new Map();
   game.rack = [...rack];
+  return game;
+}
+
+// LOVE on the plaza's second row, for tests about words alongside it.
+function withLove(game) {
+  [...'LOVE'].forEach((letter, i) => game.letters.set(slotKey([1 + i, 0, 1], '+y'), letter));
   return game;
 }
 
@@ -59,10 +67,10 @@ test('the monument has one vantage point per isometric corner', () => {
   for (const { dir } of board.vantages) assert.ok(chainsForView(board, dir).chains.some(isJoined));
 });
 
-test('LOVE on the plaza and ABLE on the far arm read as one line from the home view', () => {
+test('ABLE on the far arm ends a line that starts on the plaza, from the home view', () => {
   const game = createGame(MONUMENT, board);
   const words = chainsForView(board, HOME).chains.filter(isJoined).map((chain) => lettersOf(game, chain));
-  assert.ok(words.includes('...LOVEABLE'), `got ${words}`);
+  assert.ok(words.includes('.......ABLE'), `got ${words}`);
 });
 
 test('the join disappears a few degrees away from the vantage point', () => {
@@ -205,14 +213,14 @@ test('partial cover preserves loop continuity and wraparound word placement', ()
 
 test('tiles off the selected line are rejected', () => {
   const game = freshGame(['U', 'N', 'E', 'E', 'E', 'E', 'E']);
-  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '...LOVEABLE');
+  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '.......ABLE');
   place(game, [slotKey([1, 0, 1], '-y')], 'U');
   assert.match(preparePlay(game, chain, HOME).error, /selected line/);
 });
 
 test('tiles must not leave gaps', () => {
   const game = freshGame(['U', 'N', 'E', 'E', 'E', 'E', 'E']);
-  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '...LOVEABLE');
+  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '.......ABLE');
   place(game, [chain.slots[0], chain.slots[2]], 'UN');
   assert.match(preparePlay(game, chain, HOME).error, /gaps/);
 });
@@ -227,20 +235,20 @@ test('a new word must use a letter already on the board', () => {
 });
 
 test('a joined word scores its letters times the surfaces it spans', () => {
-  const game = freshGame(['U', 'N', 'E', 'E', 'E', 'E', 'E']);
-  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '...LOVEABLE');
-  place(game, [chain.slots[1], chain.slots[2]], 'UN');
+  const game = freshGame(['L', 'O', 'V', 'E', 'E', 'E', 'E']);
+  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '.......ABLE');
+  place(game, chain.slots.slice(3, 7), 'LOVE');
   const prepared = preparePlay(game, chain, HOME);
-  assert.deepEqual(prepared.words, ['UNLOVEABLE']);
+  assert.deepEqual(prepared.words, ['LOVEABLE']);
   const { points } = commitPlay(game, prepared);
-  // U N L O V E A B L E = 1+1+1+1+4+1+1+3+1+1 = 15, across two surfaces.
-  assert.equal(points.total, 30);
-  assert.equal(game.score, 30);
+  // L O V E A B L E = 1+1+4+1+1+3+1+1 = 13, across two surfaces.
+  assert.equal(points.total, 26);
+  assert.equal(game.score, 26);
   assert.equal(game.turnsLeft, MONUMENT.turns - 1);
 });
 
 test('words made sideways on the same face are checked and scored', () => {
-  const game = freshGame(['A', 'X', 'E', 'E', 'E', 'E', 'E']);
+  const game = withLove(freshGame(['A', 'X', 'E', 'E', 'E', 'E', 'E']));
   // Row z = 2 of the plaza runs alongside LOVE (row z = 1).
   const keys = [1, 2].map((x) => slotKey([x, 0, 2], '+y'));
   const chain = chainsForView(board, HOME).chains.find((c) => keys.every((key) => c.slots.includes(key)));
@@ -338,13 +346,13 @@ test('triple word squares sit only on lines that join others', () => {
 });
 
 test('a bonus counts under a newly placed tile', () => {
-  const game = freshGame(['U', 'N', 'E', 'E', 'E', 'E', 'E']);
-  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '...LOVEABLE');
-  game.bonuses = new Map([[chain.slots[1], 'TW'], [chain.slots[2], 'DL']]);
-  place(game, [chain.slots[1], chain.slots[2]], 'UN');
+  const game = freshGame(['L', 'O', 'V', 'E', 'E', 'E', 'E']);
+  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '.......ABLE');
+  game.bonuses = new Map([[chain.slots[3], 'TW'], [chain.slots[4], 'DL']]);
+  place(game, chain.slots.slice(3, 7), 'LOVE');
   const { points } = play(game, chain);
-  // (15 + 1 for the doubled N) x 3 for the triple word x 2 surfaces.
-  assert.equal(points.total, 16 * 3 * 2);
+  // (13 + 1 for the doubled O) x 3 for the triple word x 2 surfaces.
+  assert.equal(points.total, 14 * 3 * 2);
   assert.deepEqual(points.bonuses, ['TW', 'DL']);
 });
 
@@ -353,4 +361,30 @@ test('the offline dictionary accepts real words and rejects others', () => {
   assert.ok(isWord('LOVEABLE'));
   assert.ok(isWord('larch'));
   assert.ok(!isWord('CHARL'));
+});
+
+test('a single tile may make its word sideways only', () => {
+  const game = withLove(freshGame(['A', 'E', 'E', 'E', 'E', 'E', 'E']));
+  // Next to the L of LOVE, on the row in front of it: alone along that row,
+  // but it makes a two-letter word with the L.
+  const key = slotKey([1, 0, 2], '+y');
+  const chain = chainsForView(board, HOME).chains.find((c) => c.slots.includes(key) && c.slots.includes(slotKey([2, 0, 2], '+y')));
+  place(game, [key], 'A');
+  const prepared = preparePlay(game, chain, HOME);
+  assert.ok(!prepared.error, prepared.error);
+  assert.ok(['AL', 'LA'].includes(prepared.main.word), prepared.main.word);
+  assert.deepEqual(prepared.cross, []);
+});
+
+test('taking tiles back returns them to where they were in the rack', () => {
+  const game = freshGame(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
+  const chain = chainsForView(board, HOME).chains.find((c) => lettersOf(game, c) === '.......ABLE');
+  assert.ok(placeTile(game, chain.slots[1], 3)); // D
+  assert.ok(placeTile(game, chain.slots[2], 0)); // A
+  assert.deepEqual(game.rack, ['B', 'C', 'E', 'F', 'G']);
+  undoTile(game);
+  assert.deepEqual(game.rack, ['A', 'B', 'C', 'E', 'F', 'G']);
+  assert.ok(placeTile(game, chain.slots[2], 5)); // G
+  cancelPending(game);
+  assert.deepEqual(game.rack, ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
 });

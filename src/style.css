@@ -95,7 +95,7 @@ kbd {
   margin: 0;
 }
 
-#stats div {
+#stats > div {
   min-width: 56px;
   padding: 6px 10px;
   border: 1px solid var(--line);
@@ -320,7 +320,7 @@ kbd {
     padding: 5px 8px;
   }
 
-  #stats div {
+  #stats > div {
     min-width: 40px;
     padding: 4px 6px;
   }
@@ -409,7 +409,7 @@ kbd {
   cursor: pointer;
 }
 
-#chamber-labels span {
+.disk-labels span {
   position: absolute;
   transform: translate(-50%, -190%);
   padding: 2px 7px;
@@ -422,7 +422,7 @@ kbd {
   white-space: nowrap;
 }
 
-#chamber-labels span.answer {
+.disk-labels span.answer {
   outline: 2px solid #ffd54a;
 }
 
@@ -446,4 +446,446 @@ kbd {
   padding: 8px 18px;
   background: var(--ink);
   color: #ffffff;
+}
+
+/* Buttons that matter most on a screen, and quiet text-only ones. */
+button.primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
+
+button.link {
+  border: none;
+  background: none;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 12px;
+}
+
+#mute {
+  align-self: center;
+  font-size: 12px;
+  padding: 5px 9px;
+  background: var(--panel);
+  border-color: var(--line);
+}
+
+#mute[aria-pressed='true'] {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* The compass maps every view direction from above: the ring is the horizon,
+   the centre is straight down. Vantage points are the four dots; you are the
+   orange one. */
+#compass {
+  position: fixed;
+  right: 16px;
+  bottom: 88px;
+  width: 92px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+#compass svg {
+  display: block;
+  width: 92px;
+  height: 92px;
+  margin-bottom: 2px;
+  overflow: visible;
+}
+
+#compass .ring {
+  fill: var(--panel);
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+
+#compass .vantage {
+  fill: #ffffff;
+  stroke: var(--aligned);
+  stroke-width: 2.5;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: r 0.2s, fill 0.2s;
+}
+
+#compass .vantage.near {
+  fill: #bdf0e8;
+}
+
+#compass .vantage.here {
+  fill: var(--aligned);
+}
+
+#compass-you {
+  fill: var(--accent);
+  stroke: #ffffff;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+/* Full-screen cards over the monument: title, summary and the lab. */
+#intro,
+#summary,
+#lab {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(74, 63, 87, 0.28);
+  backdrop-filter: blur(2px);
+  z-index: 10;
+}
+
+#intro {
+  background: linear-gradient(180deg, rgba(253, 232, 220, 0.25), rgba(74, 63, 87, 0.3));
+}
+
+.intro-card,
+.summary-card {
+  width: min(520px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 28px 30px 24px;
+  border-radius: 18px;
+  background: rgba(255, 248, 242, 0.95);
+  box-shadow: 0 18px 50px rgba(74, 63, 87, 0.25);
+}
+
+.intro-card h2 {
+  margin: 0;
+  font-size: 34px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.tagline {
+  margin: 4px 0 18px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.intro-steps {
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.intro-steps li {
+  position: relative;
+  padding-left: 40px;
+  counter-increment: step;
+}
+
+.intro-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border-bottom: 3px solid var(--tile-side);
+  background: var(--tile);
+  font-weight: 700;
+  text-align: center;
+  line-height: 26px;
+}
+
+.intro-steps strong {
+  display: block;
+}
+
+.intro-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.intro-actions button {
+  font-size: 15px;
+  padding: 9px 18px;
+}
+
+.intro-foot {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.summary-card {
+  text-align: center;
+}
+
+.summary-card h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.summary-score {
+  margin: 4px 0 14px;
+  font-size: 18px;
+}
+
+#summary-points {
+  font-size: 52px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+#summary-stats {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+#summary-stats div {
+  min-width: 78px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+#summary-stats dt {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+#summary-stats dd {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+#summary-words {
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+#summary-words li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #f6eef3;
+}
+
+#summary-words li.best {
+  background: var(--pending);
+  font-weight: 700;
+}
+
+#summary-words .word {
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+
+#summary-words .detail {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#chamber-skip {
+  display: block;
+  margin: 8px auto 0;
+}
+
+/* The lab: the disk beside a panel of readouts and things to try. */
+.lab-card {
+  width: min(1040px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 16px 20px 20px;
+  border-radius: 16px;
+  background: #fff8f2;
+  box-shadow: 0 18px 50px rgba(74, 63, 87, 0.25);
+}
+
+.lab-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.lab-card h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+
+.lab-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.lab-stage {
+  position: relative;
+  width: min(100%, 74vh);
+  aspect-ratio: 1;
+  margin: 0 auto;
+}
+
+#lab-canvas,
+#lab-trail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#lab-canvas {
+  cursor: crosshair;
+}
+
+#lab-trail {
+  pointer-events: none;
+}
+
+.lab-panel {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.lab-panel p {
+  margin: 0 0 10px;
+}
+
+.lab-help {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.lab-help kbd {
+  margin: 0;
+  opacity: 1;
+  font-weight: 700;
+}
+
+.lab-panel h3 {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+#lab-readout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+#lab-readout div {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+#lab-readout div:nth-child(n + 3) {
+  grid-column: span 2;
+}
+
+#lab-readout dt {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+#lab-readout dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+#lab-status:empty {
+  display: none;
+}
+
+#lab-status {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--pending);
+  font-weight: 600;
+}
+
+#lab-goals {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+#lab-goals li {
+  margin-bottom: 4px;
+}
+
+#lab-goals li.done {
+  color: var(--success);
+}
+
+#lab-goals li.done::after {
+  content: ' ✓';
+  font-weight: 700;
+}
+
+.lab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 860px) {
+  .lab-body {
+    grid-template-columns: 1fr;
+  }
+
+  .lab-stage {
+    width: min(100%, 56vh);
+  }
+
+  #compass {
+    display: none;
+  }
+}
+
+/* Under the title screen, only the monument shows. */
+body.intro #title,
+body.intro #stats,
+body.intro #status,
+body.intro #tray,
+body.intro #compass {
+  visibility: hidden;
 }
