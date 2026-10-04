@@ -194,7 +194,7 @@ The structure takes inspiration from Penrose stairs, Escher's Waterfall and Monu
 
 - [Three.js](https://threejs.org/) for 3D graphics and the chamber's shader
 - [PeerJS](https://peerjs.com/) for online rooms, peer to peer over WebRTC
-- The Web Audio API for every sound: soft bells on a pentatonic scale, synthesised in [`src/audio.js`](src/audio.js), so there are no audio files
+- The Web Audio API for every sound: soft bells on a pentatonic scale in [`src/audio.js`](src/audio.js), and a background tune composed on the fly in [`src/music.js`](src/music.js) (four chords on a slow loop under a wandering music-box melody), so there are no audio files
 - Vite for development, builds and the dictionary proxy
 - Node's built-in test runner
 

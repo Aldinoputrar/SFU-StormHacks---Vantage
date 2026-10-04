@@ -1,5 +1,8 @@
+import { createMusic } from './music.js';
+
 // Sound, synthesised with the Web Audio API so there are no files to load:
-// soft bell tones on a pentatonic scale, in the spirit of Monument Valley.
+// soft bell tones on a pentatonic scale, in the spirit of Monument Valley,
+// over a background tune (music.js).
 // Browsers only allow audio after the player interacts, so nothing plays
 // until unlock() is called from a click or key press.
 
@@ -18,8 +21,17 @@ function loadMuted() {
 export function createSound() {
   let ctx = null;
   let master = null;
-  let pad = null;
   let muted = loadMuted();
+
+  // The tune is queued a little ahead of the clock, every quarter second.
+  function startMusic() {
+    const bed = ctx.createGain();
+    bed.gain.value = 0.7;
+    bed.connect(master);
+    const music = createMusic(ctx, bed);
+    music.start();
+    setInterval(() => music.schedule(ctx.currentTime + 1.2), 250);
+  }
 
   function unlock() {
     if (ctx) {
@@ -32,7 +44,7 @@ export function createSound() {
     master = ctx.createGain();
     master.gain.value = muted ? 0 : 0.5;
     master.connect(ctx.destination);
-    startPad();
+    startMusic();
   }
 
   // One note: an oscillator through its own envelope.
@@ -80,33 +92,6 @@ export function createSound() {
     env.gain.linearRampToValueAtTime(0, start + duration);
     source.connect(filter).connect(env).connect(master);
     source.start(start);
-  }
-
-  // A quiet drone of two slightly detuned fifths that slowly breathes.
-  function startPad() {
-    pad = ctx.createGain();
-    pad.gain.value = 0.035;
-    pad.connect(master);
-    for (const [freq, detune] of [
-      [130.81, -4],
-      [196, 3],
-      [261.63, 6],
-    ]) {
-      const osc = ctx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      osc.detune.value = detune;
-      const lfo = ctx.createOscillator();
-      const depth = ctx.createGain();
-      lfo.frequency.value = 0.07 + Math.random() * 0.05;
-      depth.gain.value = 0.4;
-      const voice = ctx.createGain();
-      voice.gain.value = 0.5;
-      lfo.connect(depth).connect(voice.gain);
-      osc.connect(voice).connect(pad);
-      osc.start();
-      lfo.start();
-    }
   }
 
   return {
