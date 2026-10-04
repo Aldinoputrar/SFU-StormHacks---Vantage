@@ -122,6 +122,8 @@ Every word gets a moment: its tiles bounce in turn, flashing gold when it crosse
 
 **Leaderboard.** The best scores on each map are kept in this browser and shown on the title screen and at the end of every run ([`src/leaderboard.js`](src/leaderboard.js)).
 
+**Hints.** The **Hint** button, three per player per run, finds the best word you can make from the current view with the letters you hold. It tries candidates against the real rules, cross-words included, picks the line for you and puts the cursor where the word starts, so you only have to type it ([`src/hint.js`](src/hint.js)).
+
 Instead of a word you can **Swap** (send your rack back and earn new letters; uses a turn). The run ends when you use your last turn, click **Finish**, or run out of tiles.
 
 ## Bonus squares
@@ -218,6 +220,7 @@ npm run build     # production build in dist/
 - **Click a tile** to lock the view and pick the line through it. Click the same tile again, or the switch button, to change to the other line through it.
 - **Choose your direction.** The heading shows Across, Down or Diagonal before you type. Across is chosen first where lines cross; the switch button names the other direction.
 - **Covered squares stay in the line.** Clicks on the board always pick the surface you can see. Squares underneath another block have a dashed mark in the word strip: click them there to type on them. Letters stay on their own block.
+- **Typing up to a letter slides back.** Click the tile just before ABLE and type L, O, V, E: each new letter pushes the others back a square, so the word ends at the hook.
 - **Type** letters (or tap your rack) to place them along the line, **Backspace** to undo, **Enter** to play, **Esc** to cancel.
 - **Reveal the trick** shows the real 3D gaps behind the lines joined at the current vantage point.
 - **Swap** sends your letters back for new ones (uses a turn); **Finish** ends the run.
@@ -237,6 +240,7 @@ npm run build     # production build in dist/
 | [`src/lab.js`](src/lab.js) | The Hyperbolic Lab: free walking, triangles, the square walk and holonomy, in three geometries |
 | [`src/audio.js`](src/audio.js) | Synthesised sound |
 | [`src/arcade.js`](src/arcade.js) | The chamber's action games: dash, swarm, golf and bounce |
+| [`src/hint.js`](src/hint.js) | Finding a word the player can make on a line |
 | [`src/missions.js`](src/missions.js) | The three goals of each run |
 | [`src/traveller.js`](src/traveller.js) | The little figure who walks every word |
 | [`src/players.js`](src/players.js) | Pass-and-play: seats, turns and standings |
@@ -267,6 +271,7 @@ npm run build     # production build in dist/
 - [x] Missions, and celebrations for every word
 - [x] Compass of vantage points
 - [x] Four maps
+- [x] Hints, and typing that slides back to end at a hook
 - [x] Four action games and four quizzes in the chamber
 - [x] A traveller who walks every word
 - [x] Pass-and-play for up to four

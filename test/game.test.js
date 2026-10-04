@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildBoard, chainsForView, slotKey } from '../src/board.js';
-import { createGame, placeTile, playWord, refillRack, swapRack } from '../src/game.js';
+import { createGame, letterAt, placeTile, placeTileBehind, playWord, refillRack, swapRack, undoTile } from '../src/game.js';
 
 const strip = {
   seed: 1,
@@ -101,4 +101,47 @@ test('swapping is refused while tiles are on the board or no turns are left', ()
   const ended = readyGame();
   ended.turnsLeft = 0;
   assert.equal(swapRack(ended), false);
+});
+
+test('typing up against a letter slides this turn\'s tiles back to make room', () => {
+  const hook = {
+    seed: 1,
+    turns: 3,
+    blocks: [{ start: [0, 0, 0], dir: [1, 0, 0], length: 8 }],
+    words: [{ start: [4, 0, 0], dir: [1, 0, 0], face: '+y', text: 'ABLE' }],
+  };
+  const hookBoard = buildBoard(hook);
+  const game = createGame(hook, hookBoard);
+  game.rack = ['L', 'O', 'V', 'E', 'X'];
+  const slots = [0, 1, 2, 3, 4, 5, 6, 7].map((x) => slotKey([x, 0, 0], '+y'));
+  const written = () => slots.map((key) => letterAt(game, key) || '.').join('');
+
+  // Click just before the A and type L, O, V, E.
+  assert.ok(placeTile(game, slots[3], 0));
+  assert.equal(written(), '...LABLE');
+  for (const letter of 'OVE') assert.ok(placeTileBehind(game, slots, game.rack.indexOf(letter)), letter);
+  assert.equal(written(), 'LOVEABLE');
+  // No room left before the L: nothing changes.
+  assert.equal(placeTileBehind(game, slots, 0), false);
+  assert.equal(written(), 'LOVEABLE');
+  assert.deepEqual(game.rack, ['X']);
+  // Undo takes the newest tile, the one next to the A.
+  assert.equal(undoTile(game), slots[3]);
+  assert.equal(written(), 'LOV.ABLE');
+});
+
+test('tiles do not slide back over a letter, or when they are not side by side', () => {
+  const level = {
+    seed: 1,
+    turns: 3,
+    blocks: [{ start: [0, 0, 0], dir: [1, 0, 0], length: 6 }],
+    words: [{ start: [0, 0, 0], dir: [1, 0, 0], face: '+y', text: 'A' }],
+  };
+  const game = createGame(level, buildBoard(level));
+  game.rack = ['B', 'C', 'D'];
+  const slots = [0, 1, 2, 3, 4, 5].map((x) => slotKey([x, 0, 0], '+y'));
+  placeTile(game, slots[1], 0); // right after the A
+  assert.equal(placeTileBehind(game, slots, 0), false, 'the A is in the way');
+  placeTile(game, slots[4], 0);
+  assert.equal(placeTileBehind(game, slots, 0), false, 'the tiles are apart');
 });

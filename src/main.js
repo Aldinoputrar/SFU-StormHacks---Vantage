@@ -17,12 +17,14 @@ import {
   isOver,
   letterAt,
   placeTile,
+  placeTileBehind,
   preparePlay,
   refillRack,
   swapRack,
   swingBridge,
   undoTile,
 } from './game.js';
+import { findFits, hintWords } from './hint.js';
 import { createHud } from './hud.js';
 import { createLab } from './lab.js';
 import { saveScores, topScores } from './leaderboard.js';
@@ -71,16 +73,23 @@ const sound = createSound();
 const chamber = createChamber({ sound });
 const lab = createLab({ sound });
 const chamberStats = { right: 0, rounds: 0 };
+// The offline word list, fetched once when first needed: for checking words
+// when Merriam-Webster cannot be reached, and for hints.
+let wordList = null;
+const loadWordList = () =>
+  (wordList ??= fetch(wordsUrl)
+    .then((response) => {
+      if (!response.ok) throw new Error(`Word list request failed: ${response.status}`);
+      return response.text();
+    })
+    .then((text) => ({ isWord: createDictionary(text), list: hintWords(text) }))
+    .catch((error) => {
+      wordList = null; // try downloading the list again next time
+      throw error;
+    }));
 // Merriam-Webster first; the offline list only loads if it is needed.
-const words = createWordChecker({
-  loadOffline: () =>
-    fetch(wordsUrl)
-      .then((response) => {
-        if (!response.ok) throw new Error(`Word list request failed: ${response.status}`);
-        return response.text();
-      })
-      .then(createDictionary),
-});
+const words = createWordChecker({ loadOffline: () => loadWordList().then(({ isWord }) => isWord) });
+const HINTS = 3; // per player, per run
 
 // Transparent, so the page's pastel sky shows through.
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -339,6 +348,10 @@ function renderHud() {
   });
   document.getElementById('lab-open').disabled = !canLook();
   document.getElementById('swing').hidden = !LEVEL.bridge;
+  const hints = players[seated].hints ?? HINTS;
+  const hintButton = document.getElementById('hint-button');
+  hintButton.textContent = `Hint (${hints})`;
+  hintButton.disabled = busy() || !hints || (mode !== 'explore' && mode !== 'placing');
   const strip = document.getElementById('players');
   strip.hidden = players.length < 2;
   if (players.length > 1) renderStandings(strip);
@@ -601,6 +614,14 @@ function placeFromRack(index) {
   }
   const at = nextEmpty(selection.cursor);
   if (at === -1) {
+    // Up against a letter or the end of the line: this turn's tiles slide
+    // back a square to make room, so the word ends where it was started.
+    if (!selection.chain.cyclic && placeTileBehind(game, selection.chain.slots, index)) {
+      sound.place(game.pending.length - 1);
+      showPending(selection.chain);
+      refresh();
+      return;
+    }
     setMessage('No empty tiles left on this line.', 'error');
     return;
   }
@@ -613,6 +634,77 @@ function placeFromRack(index) {
   selection.cursor = next === -1 ? selection.chain.slots.length : next;
   refresh();
 }
+
+// Redraws a line's squares from the tiles placed this turn.
+function showPending(chain) {
+  for (const key of chain.slots) {
+    const tile = game.pending.find(({ slot }) => slot === key);
+    if (tile) view.setTile(key, tile.letter, 'pending');
+    else if (!game.letters.has(key)) view.setTile(key, '', 'empty');
+  }
+}
+
+// A hint: the best word the player can make from the current view with the
+// letters they hold, tried against the real rules (cross-words too) and the
+// offline dictionary. It chooses the line and puts the cursor where the
+// word starts, so the player only has to type it. Three per player.
+async function hint() {
+  const player = players[seated];
+  player.hints ??= HINTS;
+  if (busy() || (mode !== 'explore' && mode !== 'placing') || !player.hints) return;
+  if (game.pending.length) {
+    setMessage('Play or cancel your tiles first, then ask for a hint.', 'error');
+    return;
+  }
+  let dictionary;
+  try {
+    dictionary = await loadWordList();
+  } catch {
+    setMessage('The word list could not be loaded, so no hint this time.', 'error');
+    return;
+  }
+  if (busy() || game.pending.length) return;
+  const exploring = mode === 'explore';
+  if (exploring) lockView(null);
+  if (mode !== 'placing') return;
+
+  // The best few fits on each line with letters and room, best lines first.
+  const fits = current.chains
+    .filter((chain) => !chain.cyclic && chain.slots.length >= 2)
+    .flatMap((chain) =>
+      findFits(chain.slots.map((key) => letterAt(game, key)), game.rack, dictionary.list, chain.slotLines)
+        .slice(0, 6)
+        .map((fit) => ({ ...fit, chain })),
+    )
+    .sort((a, b) => b.spans - a.spans || b.value - a.value);
+
+  // Try each for real: place it, check the rules and every word it makes.
+  const found = fits.slice(0, 60).find(({ chain, tiles }) => {
+    const placed = tiles.every(({ index, letter }) => placeTile(game, chain.slots[index], game.rack.indexOf(letter)));
+    const prepared = placed ? preparePlay(game, chain, lockedDir) : { error: true };
+    cancelPending(game);
+    return !prepared.error && prepared.words.every(dictionary.isWord);
+  });
+  if (!found) {
+    if (exploring) exitPlacing();
+    setMessage(
+      current.chains.some(isJoined)
+        ? 'No word found from here with these letters. Try another corner, or Swap.'
+        : 'No word found from here. Press Isometric view to find a hook, or Swap.',
+      'error',
+      7000,
+    );
+    return;
+  }
+  player.hints--;
+  const first = found.tiles[0].index;
+  selection = { chain: found.chain, cursor: first, clicked: found.chain.slots[first] };
+  const typing = found.tiles.map(({ letter }) => letter).join(' ');
+  const across = found.spans > 1 ? ' across the gap' : '';
+  setMessage(`Hint: type ${typing} to make ${found.word}${across}, then press Enter.`, 'success', 15000);
+  refresh();
+}
+document.getElementById('hint-button').addEventListener('click', hint);
 
 function typeLetter(letter) {
   const index = game.rack.indexOf(letter);

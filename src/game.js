@@ -97,6 +97,23 @@ export function placeTile(game, key, rackIndex) {
   return true;
 }
 
+// Typing up against a letter (or the end of the line): when this turn's
+// tiles sit side by side and the square before them is free, they all move
+// one square back and the new tile takes the last square. So clicking just
+// before ABLE and typing L, O, V, E writes LOVE ending at the A, rather than
+// running out of room after the L. slots is the line in reading order.
+// Returns true if the tile was placed.
+export function placeTileBehind(game, slots, rackIndex) {
+  const at = game.pending.map((tile) => slots.indexOf(tile.slot)).sort((a, b) => a - b);
+  if (!at.length || at[0] < 1 || at.some((index, i) => index !== at[0] + i)) return false;
+  if (letterAt(game, slots[at[0] - 1])) return false;
+  if (!Number.isInteger(rackIndex) || rackIndex < 0 || rackIndex >= game.rack.length || game.turnsLeft <= 0) return false;
+  const last = slots[at.at(-1)];
+  const back = new Map(game.pending.map((tile) => [tile, slots[slots.indexOf(tile.slot) - 1]]));
+  for (const [tile, slot] of back) tile.slot = slot;
+  return placeTile(game, last, rackIndex);
+}
+
 // Takes back the most recently placed tile, returning it to the spot in the
 // rack it came from, and returns its slot.
 export function undoTile(game) {
