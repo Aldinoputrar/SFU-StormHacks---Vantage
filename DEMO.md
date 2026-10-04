@@ -4,27 +4,26 @@ A three-minute walkthrough for judges, written for the Beyond Euclid challenge. 
 
 Useful addresses for a demo:
 
-- `?game=golf` (or `dash`, `swarm`, `bounce`) and `?quiz=square` (or `closest`, `straight`, `triangle`) choose the chamber's rounds, so you can show the one you want.
-- `?skip` offers "Skip the chamber" from the very first visit, to get to the board quickly.
-- `?map=plaza`, `?map=spire` or `?map=courtyard` opens another map. They combine: `?map=plaza&game=golf&skip`. The swing bridge is on the Plaza.
+- `?game=golf` (or `dash`, `swarm`, `bounce`) or `?quiz=square` (or `closest`, `straight`, `triangle`) makes the Chamber button go straight to that game, so you can show the one you want.
+- `?map=plaza`, `?map=spire` or `?map=courtyard` opens another map. They combine: `?map=plaza&game=golf`. The swing bridge is on the Plaza.
 
 ## 0:00 – The hook (title screen)
 
-> "Vantage is Scrabble played on two kinds of impossible space. The board is an Escher-style monument where words only join up from the right viewpoint, and you earn your letters in the hyperbolic plane."
+> "Vantage is Scrabble played on two kinds of impossible space. The board is an Escher-style monument where words only join up from the right viewpoint, and you win power-ups by playing games in the hyperbolic plane."
 
 Let the title screen sit for a moment: the monument turns behind it and flashes each time it passes a vantage point.
 
 ## 0:20 – Hyperbolic Chamber (*Geometric creativity, Educational value*)
 
-Open with `?game=golf` and press **Play**.
+Open with `?game=golf`, press **Play**, then press **Chamber ★**.
 
-> "You earn your letters by playing in hyperbolic space. This is golf: the ball rolls along a true straight line."
+> "The chamber is where you win power-ups: a wild tile, a double score, an extra turn. This is golf: the ball rolls along a true straight line."
 
 Drag back from the ball, aiming straight at the hole, and let go. It curves away and misses.
 
 > "Straight lines here bow towards the centre. In our tests, aiming straight at the hole on screen misses every single time."
 
-Aim a little inward and sink it. Then the quiz:
+Aim a little inward and sink it, and pick a prize. (Without `?game=`, the Chamber button opens a menu of four action games and a quick puzzle.) One of the puzzles:
 
 > "Three crystals look equally far away and equally big. Only one is truly closest. The floor tiles are all the same size in hyperbolic terms, so the honest way to judge is to count tiles, not pixels."
 
@@ -40,7 +39,7 @@ After a closest-crystal quiz the crystals slide to the middle and become a trian
 
 Use the Plaza map for this part (`?map=plaza`): its ABLE hook is open and it has the swing bridge. On the Monument map the same view shows LOVE and ABLE already joined as LOVEABLE, which is the quickest way to show the illusion itself.
 
-Collect the letters. Point out the **compass** (bottom right): the orange dot is the camera, the four dots are vantage points.
+Back on the board, point out the **compass** (bottom right): the orange dot is the camera, the four dots are vantage points.
 
 Drag to orbit and let go near a corner: the camera snaps and the line glows.
 
@@ -92,7 +91,7 @@ Play a word: it bounces on their screen and the traveller walks it there too.
 
 ## 2:45 – Close (*Technical execution, Documentation*)
 
-> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. 117 Node tests cover alignment, rules, the dictionary, the maths in all three geometries, and even play the four action games. There are four maps, online rooms and pass-and-play for four, and a leaderboard. The README explains every formula."
+> "Everything's drawn per pixel in a single shader: the {3, 8} tiling by reflection, geodesics by sliding each segment to the centre with a Möbius map. Sound is synthesised, so there are no assets. 122 Node tests cover alignment, rules, the dictionary, the maths in all three geometries, and even play the four action games. There are four maps, online rooms and pass-and-play for four, and a leaderboard. The README explains every formula."
 
 ## Questions you might get
 

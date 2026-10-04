@@ -12,6 +12,7 @@ export const RACK_SIZE = 7;
 // so a game stays plain data that can be copied or saved.
 const boards = new WeakMap();
 export const BINGO = 50; // for using all seven tiles in one word, as in Scrabble
+export const WILD = '?'; // a wild tile in the rack: it can stand for any letter, and scores nothing
 const VOWELS = new Set('AEIOU');
 
 function createBag(seed) {
@@ -46,6 +47,8 @@ export function createGame(level, board) {
     turnsLeft: level.turns,
     score: 0,
     finished: false,
+    wilds: new Set(), // slots holding a wild tile, which score nothing
+    boost: 1, // multiplies the next word's score: 2 while a double-score token is armed
     history: [], // every turn, with the view each word was played from
   };
   boards.set(game, board);
@@ -89,11 +92,14 @@ export function letterAt(game, key) {
   return game.letters.get(key) ?? game.pending.find((tile) => tile.slot === key)?.letter ?? '';
 }
 
-export function placeTile(game, key, rackIndex) {
+// Places a tile from the rack. A wild tile needs `as`, the letter it stands for.
+export function placeTile(game, key, rackIndex, as = null) {
   if (game.turnsLeft <= 0 || !game.slots.has(key) || letterAt(game, key)) return false;
   if (!Number.isInteger(rackIndex) || rackIndex < 0 || rackIndex >= game.rack.length) return false;
+  const wild = game.rack[rackIndex] === WILD;
+  if (wild && !/^[A-Z]$/.test(as ?? '')) return false;
   const [letter] = game.rack.splice(rackIndex, 1);
-  game.pending.push({ slot: key, letter, from: rackIndex });
+  game.pending.push({ slot: key, letter: wild ? as : letter, wild, from: rackIndex });
   return true;
 }
 
@@ -103,15 +109,16 @@ export function placeTile(game, key, rackIndex) {
 // before ABLE and typing L, O, V, E writes LOVE ending at the A, rather than
 // running out of room after the L. slots is the line in reading order.
 // Returns true if the tile was placed.
-export function placeTileBehind(game, slots, rackIndex) {
+export function placeTileBehind(game, slots, rackIndex, as = null) {
   const at = game.pending.map((tile) => slots.indexOf(tile.slot)).sort((a, b) => a - b);
   if (!at.length || at[0] < 1 || at.some((index, i) => index !== at[0] + i)) return false;
   if (letterAt(game, slots[at[0] - 1])) return false;
   if (!Number.isInteger(rackIndex) || rackIndex < 0 || rackIndex >= game.rack.length || game.turnsLeft <= 0) return false;
+  if (game.rack[rackIndex] === WILD && !/^[A-Z]$/.test(as ?? '')) return false;
   const last = slots[at.at(-1)];
   const back = new Map(game.pending.map((tile) => [tile, slots[slots.indexOf(tile.slot) - 1]]));
   for (const [tile, slot] of back) tile.slot = slot;
-  return placeTile(game, last, rackIndex);
+  return placeTile(game, last, rackIndex, as);
 }
 
 // Takes back the most recently placed tile, returning it to the spot in the
@@ -119,7 +126,7 @@ export function placeTileBehind(game, slots, rackIndex) {
 export function undoTile(game) {
   const tile = game.pending.pop();
   if (!tile) return null;
-  game.rack.splice(Math.min(tile.from ?? game.rack.length, game.rack.length), 0, tile.letter);
+  game.rack.splice(Math.min(tile.from ?? game.rack.length, game.rack.length), 0, tile.wild ? WILD : tile.letter);
   return tile.slot;
 }
 
@@ -129,14 +136,15 @@ export function cancelPending(game) {
   return slots;
 }
 
-// Spends a turn sending the whole rack back to the bag, to be refilled in the
-// chamber. Returns false if tiles are on the board or no turns are left.
-export function swapRack(game) {
-  if (game.pending.length || game.turnsLeft <= 0 || !game.rack.length) return false;
-  game.bag.unshift(...game.rack);
-  game.rack = [];
-  game.history.push({ type: 'swap' });
-  game.turnsLeft--;
+// Sends the whole rack back to the bag, to be dealt again, spending a turn
+// unless the swap is free (a power-up). A wild tile is kept. Returns false if
+// tiles are on the board or no turns are left.
+export function swapRack(game, { free = false } = {}) {
+  if (game.pending.length || game.turnsLeft <= 0 || !game.rack.some((letter) => letter !== WILD)) return false;
+  game.bag.unshift(...game.rack.filter((letter) => letter !== WILD));
+  game.rack = game.rack.filter((letter) => letter === WILD);
+  game.history.push({ type: 'swap', free });
+  if (!free) game.turnsLeft--;
   return true;
 }
 
@@ -174,6 +182,7 @@ export function swingBridge(game) {
 export function snapshot(game) {
   return {
     letters: [...game.letters],
+    wilds: [...game.wilds],
     bag: [...game.bag],
     turnsLeft: game.turnsLeft,
     finished: game.finished,
@@ -193,6 +202,7 @@ export function snapshot(game) {
 export function restore(game, data) {
   cancelPending(game);
   game.letters = new Map(data.letters);
+  game.wilds = new Set(data.wilds ?? []);
   game.bag = [...data.bag];
   game.turnsLeft = data.turnsLeft;
   game.finished = data.finished;
@@ -260,13 +270,18 @@ export function playWord(game, chain, viewDir, isWord) {
 export function commitPlay(game, play) {
   const placed = game.pending;
   const fresh = new Set(placed.map((tile) => tile.slot));
+  for (const tile of placed) if (tile.wild) game.wilds.add(tile.slot);
   const main = scoreSlots(game, play.main.slots, fresh);
   const cross = play.cross.map((word) => ({ word: word.word, ...scoreSlots(game, word.slots, fresh) }));
   const bingo = placed.length === RACK_SIZE ? BINGO : 0;
 
   const mainTotal = main.letters * main.wordMultiplier * play.main.surfaces;
-  const total = mainTotal + cross.reduce((sum, word) => sum + word.letters * word.wordMultiplier, 0) + bingo;
+  // An armed double-score token doubles the whole turn, and is used up.
+  const boost = game.boost;
+  game.boost = 1;
+  const total = (mainTotal + cross.reduce((sum, word) => sum + word.letters * word.wordMultiplier, 0) + bingo) * boost;
   const points = {
+    boost,
     letters: main.letters,
     wordMultiplier: main.wordMultiplier,
     surfaces: play.main.surfaces,
@@ -305,7 +320,8 @@ function scoreSlots(game, slots, fresh) {
     const kind = fresh.has(key) ? game.bonuses.get(key) : null;
     const bonus = kind ? BONUS_KINDS[kind] : null;
     if (kind) bonuses.push(kind);
-    letters += LETTER_VALUES[letterAt(game, key)] * (bonus?.letter ?? 1);
+    const value = game.wilds.has(key) ? 0 : LETTER_VALUES[letterAt(game, key)];
+    letters += value * (bonus?.letter ?? 1);
     wordMultiplier *= bonus?.word ?? 1;
   }
   return { letters, wordMultiplier, bonuses };

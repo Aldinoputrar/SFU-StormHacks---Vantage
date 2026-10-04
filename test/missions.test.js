@@ -27,7 +27,7 @@ test('a word completes the missions it meets, once', () => {
   const done = completeMissions(missions, { turn: turn({ word: 'QUARTZ', placed: [{ letter: 'Q' }], points: { surfaces: 2, total: 48, bonuses: ['TW'] } }) });
   assert.deepEqual(done.map(({ id }) => id).sort(), ['big', 'bonus', 'cross', 'long', 'rare']);
   assert.deepEqual(completeMissions(missions, { turn: turn() }), []);
-  assert.deepEqual(completeMissions(missions, { chamber: 2 }), []);
-  assert.deepEqual(completeMissions(missions, { chamber: 3 }).map(({ id }) => id), ['chamber']);
+  assert.deepEqual(completeMissions(missions, { chamber: 1 }), []);
+  assert.deepEqual(completeMissions(missions, { chamber: 2 }).map(({ id }) => id), ['chamber']);
   assert.deepEqual(completeMissions(missions, { turn: turn({ cyclic: true, onBridge: true }) }).map(({ id }) => id).sort(), ['bridge', 'loop']);
 });

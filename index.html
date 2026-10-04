@@ -32,6 +32,7 @@
       <strong id="headline"></strong>
       <div id="pattern" hidden></div>
       <button id="switch-line" type="button" hidden>Switch line</button>
+      <div id="wild-picker" hidden aria-label="Choose a letter for the wild tile"></div>
       <span id="hint"></span>
       <span id="message"></span>
     </section>
@@ -61,6 +62,8 @@
         <button id="cancel" type="button">Cancel <kbd>Esc</kbd></button>
       </div>
       <div id="turn-actions">
+        <button id="chamber-open" type="button" title="Play a game in curved space to win a power-up (once a turn)">Chamber ★</button>
+        <button id="boost" type="button" hidden title="Double the score of your next word">×2</button>
         <button id="hint-button" type="button" title="Show a word you can make from here (three per run)">Hint</button>
         <button id="swap" type="button" title="Send your letters back and earn new ones (uses a turn)">Swap</button>
         <button id="finish" type="button">Finish</button>
@@ -74,11 +77,6 @@
         <div class="intro-grid">
           <ol class="intro-steps">
             <li>
-              <strong>Earn letters in curved space.</strong>
-              Play a quick game on a floor that looks squished near the rim: grab crystals, putt along curved
-              lines, dodge shadows, then solve one puzzle. More stars, better letters.
-            </li>
-            <li>
               <strong>Press Isometric view.</strong>
               Some rows of tiles are far apart in 3D, but from one special angle they look like a single line, like a
               Monument Valley level.
@@ -87,6 +85,11 @@
               <strong>Click a glowing tile and type a word.</strong>
               Start on the plaza and let the word run across the gap into the letters on a floating arm. Words that
               cross the gap score double, and the traveller walks them.
+            </li>
+            <li>
+              <strong>Visit the Chamber for power-ups.</strong>
+              Whenever you like, play a quick game in curved space: grab crystals, putt along lines that bend, outrun
+              shadows. Win a wild tile, a double score, an extra turn and more.
             </li>
           </ol>
           <div class="intro-setup">
@@ -144,6 +147,7 @@
           <span id="chamber-round"></span>
         </header>
         <p id="chamber-prompt"></p>
+        <div id="chamber-menu" hidden></div>
         <div class="chamber-stage">
           <canvas id="chamber-canvas"></canvas>
           <canvas id="chamber-paths"></canvas>
@@ -151,7 +155,6 @@
         </div>
         <p id="chamber-result" aria-live="polite"></p>
         <button id="chamber-go" type="button" hidden></button>
-        <button id="chamber-skip" type="button" class="link" hidden>Skip the chamber: draw letters without a bonus</button>
       </div>
     </section>
 

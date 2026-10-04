@@ -45,7 +45,7 @@ test('crystal dash: walking to the nearest crystal again and again collects plen
     const seen = disk.toScreen(nearest);
     game.pointer('down', [seen[0] * 0.5, seen[1] * 0.5]);
   });
-  assert.ok(result, 'the game ends after twenty seconds');
+  assert.ok(result, 'the game ends when the time is up');
   assert.equal(result.stars, 2, result.text);
 });
 

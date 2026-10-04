@@ -187,3 +187,59 @@ test('a game restored from a snapshot on another device plays on identically', (
   // Bonus squares come from the seed, so both devices already agree on them.
   assert.deepEqual([...theirs.bonuses].sort(), [...mine.bonuses].sort());
 });
+
+// A strip with ABLE on it, for power-up tests.
+function hookGame(rack) {
+  const hook = {
+    seed: 1,
+    turns: 3,
+    blocks: [{ start: [0, 0, 0], dir: [1, 0, 0], length: 8 }],
+    words: [{ start: [4, 0, 0], dir: [1, 0, 0], face: '+y', text: 'ABLE' }],
+  };
+  const hookBoard = buildBoard(hook);
+  const game = createGame(hook, hookBoard);
+  game.bonuses = new Map();
+  game.rack = [...rack];
+  const slots = [0, 1, 2, 3, 4, 5, 6, 7].map((x) => slotKey([x, 0, 0], '+y'));
+  const chain = chainsForView(hookBoard, view).chains.find((c) => c.slots.includes(slots[0]) && c.slots.includes(slots[7]));
+  return { game, slots, chain };
+}
+
+test('a wild tile stands for any letter, scores nothing, and comes back wild when undone', () => {
+  const { game, slots, chain } = hookGame(['?', 'X']);
+  assert.equal(placeTile(game, slots[3], 0), false, 'a wild tile needs a letter');
+  assert.ok(placeTile(game, slots[3], 0, 'T'));
+  assert.equal(letterAt(game, slots[3]), 'T');
+  assert.equal(undoTile(game), slots[3]);
+  assert.deepEqual(game.rack, ['?', 'X']);
+
+  assert.ok(placeTile(game, slots[3], 0, 'T'));
+  const { word, points } = playWord(game, chain, view, () => true);
+  assert.equal(word, 'TABLE');
+  // A B L E = 1 + 3 + 1 + 1 = 6; the wild T adds nothing.
+  assert.equal(points.total, 6);
+  assert.ok(game.wilds.has(slots[3]));
+  assert.deepEqual(snapshot(game).wilds, [slots[3]]);
+});
+
+test('an armed double-score token doubles the next word only', () => {
+  const { game, slots, chain } = hookGame(['T', 'S']);
+  game.boost = 2;
+  placeTile(game, slots[3], 0);
+  const first = playWord(game, chain, view, () => true);
+  assert.equal(first.points.total, 14); // TABLE is 7, doubled
+  assert.equal(first.points.boost, 2);
+  assert.equal(game.boost, 1);
+});
+
+test('a free swap keeps the turn, and any swap keeps a wild tile', () => {
+  const { game } = hookGame(['A', '?', 'B']);
+  const turns = game.turnsLeft;
+  assert.ok(swapRack(game, { free: true }));
+  assert.equal(game.turnsLeft, turns);
+  assert.deepEqual(game.rack, ['?']);
+  assert.equal(swapRack(game), false, 'nothing but a wild tile left to swap');
+  game.rack.push('C');
+  assert.ok(swapRack(game));
+  assert.equal(game.turnsLeft, turns - 1);
+});

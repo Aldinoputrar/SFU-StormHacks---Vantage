@@ -4,7 +4,7 @@ Scrabble, if the board were an impossible object.
 
 ## What it is
 
-A single-player word puzzle in two parts. In the **Hyperbolic Chamber** you earn your letters by judging distance in curved space; on the **monument**, an Escher-like structure in the style of Monument Valley, you play them as words along lines that only join up from the right viewpoint. Between turns, the **Hyperbolic Lab** lets you walk the hyperbolic plane freely, compare it with flat space and the sphere, and find out for yourself what curvature does.
+A single-player word puzzle in two parts. On the **monument**, an Escher-like structure in the style of Monument Valley, you play your letters as words along lines that only join up from the right viewpoint; in the **Hyperbolic Chamber** you win power-ups by playing games in curved space. Between turns, the **Hyperbolic Lab** lets you walk the hyperbolic plane freely, compare it with flat space and the sphere, and find out for yourself what curvature does.
 
 | Game | What we took from it |
 | --- | --- |
@@ -44,22 +44,29 @@ One connected monument: a lavender tower in the middle, a coral Penrose crown re
 
 ## The Hyperbolic Chamber
 
-Before each turn you earn letters in a short minigame (about 30 seconds) set in the Poincaré disk, a model of the infinite hyperbolic plane drawn inside a circle.
+Letters are dealt automatically at the start of every turn (each tile the better of two draws from the bag, so racks stay playable). The chamber is optional: once a turn you can press **Chamber**, pick a game set in the Poincaré disk, a model of the infinite hyperbolic plane drawn inside a circle, and win a **power-up** you choose yourself.
 
-Each visit has two rounds: an **action game** worth up to two stars, then a **quiz** worth one, so a perfect visit earns three. The first visit is always the crystal dash and then the closest-crystal quiz; later visits pick a different action game each time and any quiz.
+| Result | Choose one of |
+| --- | --- |
+| Two stars | **Wild tile** (any letter; scores nothing itself), **Double score** (arm it before a word), **Extra turn** |
+| One star | **Extra hint**, **Free swap** (new letters without using a turn) |
+
+The floor is a tiling of triangles, eight at each corner. Every triangle is the same size in hyperbolic terms, so they shrink towards the rim, and every game turns on that: space near the rim is much bigger than it looks.
+
+The four action games score up to two stars; the quick puzzle, one of four questions, scores one.
 
 ### Action games
 
 All four run on the same hyperbolic floor ([`src/arcade.js`](src/arcade.js)), and the tests play each one to check it can be won and lost ([`test/arcade.test.js`](test/arcade.test.js)).
 
-- **Crystal dash.** Twenty seconds to walk about (W A S D, or hold the floor) and grab as many crystals as you can. Those near the rim look close and aren't. 8 crystals for two stars, 4 for one.
-- **Escape the swarm.** Shadows close in, a little slower than you, for twenty seconds; three hearts. Hyperbolic space opens up so fast that a few steps sideways leave a chaser far behind.
+- **Crystal dash.** Fifteen seconds to run about (W A S D, or hold the floor) grabbing crystals. Those near the rim look close and aren't. Quick catches build a combo worth up to three each, and gold crystals are worth three. 32 points for two stars, 14 for one.
+- **Escape the swarm.** Shadows close in, a little slower than you, for fifteen seconds; three hearts. Hyperbolic space opens up so fast that a few steps sideways leave a chaser far behind.
 - **Geodesic golf.** Drag back from the ball and let go to putt. The ball rolls along a true straight line, which bows towards the centre on screen; an orange guide shows how its roll begins. In one for two stars, in three for one. In the tests, aiming straight at the hole on screen misses every time; aiming along the geodesic sinks it.
 - **Bounce shot.** A barrier blocks the way to the target. The shot follows geodesics and bounces off the round arena wall and the barrier, angle in equalling angle out; a guide line shows the true path, bounces and all.
 
 Moving things step along geodesics: slide the point to the centre, step along the diameter, slide back, and turn the heading by the argument of that map's derivative (`geodesicStep`). A bounce mirrors the heading in the wall's tangent where it hits (`bounce`).
 
-### Quizzes
+### Quick puzzles
 
 **Closest crystal:**
 
@@ -78,13 +85,7 @@ Moving things step along geodesics: slide the point to the centre, step along th
 
 **Where will you end up?** You will walk a square: equal sides, right-angle turns. Pick where you land. One choice is back where you started, the flat-world answer, which is never right; then you walk it for real, leaving a trail.
 
-**Scoring and the lesson:**
-
-- Each correct answer improves your letters: every new tile is the best of (correct answers + 1) draws from the bag, favouring vowels when your rack is short of them, then high-scoring letters.
-- After the last round the three crystals slide to the middle and become a **geodesic triangle**, labelled with its angles. They always add up to less than 180°, and the shortfall is exactly the triangle's area (Gauss–Bonnet). The floor tiles are triangles too, each with three 45° corners.
-- From the second visit on you can skip the chamber for a plain draw.
-
-You visit the chamber at the start, after every word, and after a swap. The rack always holds at most seven tiles.
+After a closest-crystal puzzle the three crystals slide to the middle and become a **geodesic triangle**, labelled with its angles. They always add up to less than 180°, and the shortfall is exactly the triangle's area (Gauss–Bonnet). The floor tiles are triangles too, each with three 45° corners.
 
 ## The Hyperbolic Lab
 
@@ -107,12 +108,13 @@ Controls: <kbd>W A S D</kbd> or arrow keys to walk, hold the floor to walk towar
 
 ## How to play
 
-1. **Earn letters** in the Hyperbolic Chamber.
+1. **Get your letters.** They are dealt at the start of each turn.
 2. **Find a vantage point.** Orbit the monument; release near one of the four isometric views and the camera snaps to it. Lines that join from there glow.
 3. **Play a word.** Click a tile to lock the view and choose the line through it, then type or tap letters. A word must use at least one letter already on the board, and every word it makes sideways on the same face must be valid too.
-4. **Check and score.** Words are checked with Merriam-Webster's Scrabble dictionary, then scored, and you return to the chamber for new letters.
+4. **Check and score.** Words are checked with Merriam-Webster's Scrabble dictionary, then scored, and you are dealt new letters.
+5. **Visit the Chamber** when you like, once a turn, to win a power-up.
 
-**Missions.** Each run deals three goals, always including *cross the gap* and two more, such as writing on the endless loop, playing on the swung bridge, landing a word bonus, or winning every chamber round. Each one finished is worth 15 points ([`src/missions.js`](src/missions.js)).
+**Missions.** Each run deals three goals, always including *cross the gap* and two more, such as writing on the endless loop, playing on the swung bridge, landing a word bonus, or winning a two-star prize in the chamber. Each one finished is worth 15 points ([`src/missions.js`](src/missions.js)).
 
 Every word gets a moment: its tiles bounce in turn, flashing gold when it crossed the illusion, the score rises over the monument and counts up in the corner, and big words and missions throw confetti.
 
@@ -209,7 +211,7 @@ To check words with Merriam-Webster, the server must be able to reach `scrabble.
 
 To put it online, deploy to Vercel (`npx vercel`, then `npx vercel --prod`): [`vercel.json`](vercel.json) already relays the dictionary checks, and online rooms need nothing more, since they are peer to peer.
 
-For demos, the address can choose what to show: `?map=plaza`, `?map=spire` or `?map=courtyard` for another map, `?game=golf` (or `dash`, `swarm`, `bounce`) and `?quiz=square` (or `closest`, `straight`, `triangle`) for the chamber's rounds, and `?skip` to offer skipping the chamber from the first visit.
+For demos, the address can choose what to show: `?map=plaza`, `?map=spire` or `?map=courtyard` for another map, `?game=golf` (or `dash`, `swarm`, `bounce`) and `?quiz=square` (or `closest`, `straight`, `triangle`) to go straight to one chamber game or puzzle.
 
 ```bash
 npm test          # alignment, rules, dictionary, hyperbolic maths and the action games
@@ -246,6 +248,7 @@ npm run build     # production build in dist/
 | [`src/audio.js`](src/audio.js) | Synthesised sound |
 | [`src/arcade.js`](src/arcade.js) | The chamber's action games: dash, swarm, golf and bounce |
 | [`src/hint.js`](src/hint.js) | Finding a word the player can make on a line |
+| [`src/powers.js`](src/powers.js) | The power-ups the chamber wins |
 | [`src/missions.js`](src/missions.js) | The three goals of each run |
 | [`src/traveller.js`](src/traveller.js) | The little figure who walks every word |
 | [`src/players.js`](src/players.js) | Pass-and-play: seats, turns and standings |
@@ -278,7 +281,7 @@ npm run build     # production build in dist/
 - [x] Compass of vantage points
 - [x] Four maps
 - [x] Hints, and typing that slides back to end at a hook
-- [x] Four action games and four quizzes in the chamber
+- [x] Four action games and four puzzles in the chamber, played for power-ups
 - [x] A traveller who walks every word
 - [x] Pass-and-play for up to four
 - [x] A local leaderboard

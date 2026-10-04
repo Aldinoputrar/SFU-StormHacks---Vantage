@@ -21,28 +21,33 @@ import {
 } from './hyperbolic.js';
 import { shuffled } from './random.js';
 
-// The Hyperbolic Chamber: a short minigame played before each turn to earn
-// letters, in a Poincaré disk. Every tile of the triangle tiling is the same
-// size in hyperbolic terms, so tiles shrink towards the rim and counting them
-// is a fair way to judge distance. Four kinds of round:
+// The Hyperbolic Chamber: games on the hyperbolic plane, in a Poincaré disk,
+// that win power-ups. It is optional: the player opens it when they like,
+// picks a game, and a win offers a choice of prizes (see powers.js). Every
+// tile of the triangle tiling is the same size in hyperbolic terms, so tiles
+// shrink towards the rim, and every game turns on that.
+//
+// Four action games from arcade.js (dash, swarm, golf, bounce) score up to
+// two stars. A quick puzzle scores one, and is one of:
 //   closest   three crystals look about equally far away and equally big;
-//             only one is truly the closest.
+//             only one is truly the closest. Afterwards its three crystals
+//             mark a triangle whose angles add up to less than 180°.
 //   straight  three paths lead to a crystal; only one is the geodesic, and it
 //             is not the one that looks straight.
 //   triangle  three triangles look the same size; the one nearest the rim
 //             holds far more.
 //   square    you will walk a square: where do you end up? Not where you
 //             started.
-// Each visit is two rounds: an action game from arcade.js (dash, swarm,
-// golf or bounce: up to two stars) and then one of those quizzes (one more
-// star), so a perfect visit scores three. The first visit is always the
-// crystal dash and then the closest crystal. After a closest-crystal quiz,
-// its three crystals mark a triangle whose angles add up to less than 180°.
 
-const FIRST_VISIT = ['dash', 'closest'];
 const QUIZZES = ['closest', 'straight', 'triangle', 'square'];
-const ROUNDS = FIRST_VISIT.length;
-const BEST = 3; // two stars from the action game, one from the quiz
+// What the menu offers.
+const GAMES = [
+  { id: 'dash', name: 'Crystal dash', text: 'Grab crystals against the clock.' },
+  { id: 'golf', name: 'Geodesic golf', text: 'Putt along a line that curves.' },
+  { id: 'swarm', name: 'Escape the swarm', text: 'Outrun the shadows.' },
+  { id: 'bounce', name: 'Bounce shot', text: 'Bank a shot round the wall.' },
+  { id: 'puzzle', name: 'Quick puzzle', text: 'One question. A smaller prize.' },
+];
 const LEG_MS = 650; // each side of the square walk
 const TARGET_COLOR = '#f4b942';
 const PLAYER_RADIUS = 0.16; // hyperbolic
@@ -54,7 +59,6 @@ const CRYSTALS = [
   { name: 'C', color: '#8c70d8' },
 ];
 const TRIANGLE_INK = '#4a3f57';
-const SKIP = Symbol('skip');
 
 // The middle of three points.
 const middle = (points) => [0, 1].map((k) => (points[0][k] + points[1][k] + points[2][k]) / 3);
@@ -82,7 +86,8 @@ export function createChamber({ sound } = {}) {
   const prompt = $('chamber-prompt');
   const result = $('chamber-result');
   const button = $('chamber-go');
-  const skipButton = $('chamber-skip');
+  const menu = $('chamber-menu');
+  const stage = root.querySelector('.chamber-stage');
   const roundText = $('chamber-round');
 
   let disk = null;
@@ -94,9 +99,6 @@ export function createChamber({ sound } = {}) {
   let lesson = null; // the triangle shown after the last round
   let animation = null;
   let onPick = null;
-  let kinds = FIRST_VISIT; // this visit's rounds
-  let visits = 0;
-  let lastAction = null;
   let action = null; // the action game being played, if any
 
   function setup() {
@@ -376,12 +378,11 @@ export function createChamber({ sound } = {}) {
   // Lays out a round around the player's spot on screen. A straight-line
   // round needs the player out towards the rim, and a square round needs
   // them at the centre, so the world first slides them there.
-  async function startRound(index) {
+  async function startRound(kind) {
     round = null;
     labels.replaceChildren();
     settle();
     const spot = player ? disk.toScreen(player) : null;
-    const kind = kinds[index];
     if (kind === 'triangle') {
       const layout = generateTriangleRound(Math.random);
       round = { ...layout, kind, triangles: layout.triangles.map((points) => points.map(disk.toWorld)), goal: null };
@@ -457,9 +458,7 @@ export function createChamber({ sound } = {}) {
       const side = round.side.toFixed(1);
       return `You will walk ${side} up, ${side} right, ${side} down and ${side} left, turning 90° each time. Where do you end up?`;
     }
-    return visits === 1
-      ? 'Space stretches towards the rim: every floor tile is the same size. Which crystal is truly closest to you?'
-      : 'Which crystal is truly closest? Count the tiles, not the pixels.';
+    return 'Space stretches towards the rim: every floor tile is the same size. Which crystal is truly closest to you? Count the tiles, not the pixels.';
   }
 
   function showAnswer(pick) {
@@ -611,10 +610,48 @@ export function createChamber({ sound } = {}) {
     });
   }
 
-  // Plays a session of the chamber and resolves to { score, skipped }: the
-  // number of rounds won, and whether the player skipped the session.
-  // skippable offers a plain draw instead, for players who know the chamber.
-  async function play({ title, skippable = false }) {
+  // Shows a list of choices in the card and resolves to the chosen id, or
+  // to null if the player leaves. options: [{ id, name, text, mark }].
+  function chooseFrom(options, leave = null) {
+    stage.hidden = true;
+    menu.hidden = false;
+    return new Promise((resolve) => {
+      const done = (id) => {
+        menu.hidden = true;
+        menu.replaceChildren();
+        stage.hidden = false;
+        resize();
+        resolve(id);
+      };
+      menu.replaceChildren(
+        ...options.map(({ id, name, text, mark }) => {
+          const choice = document.createElement('button');
+          choice.type = 'button';
+          choice.className = 'choice-card';
+          const title = document.createElement('strong');
+          title.textContent = mark ? `${mark}  ${name}` : name;
+          const detail = document.createElement('span');
+          detail.textContent = text;
+          choice.append(title, detail);
+          choice.addEventListener('click', () => done(id));
+          return choice;
+        }),
+      );
+      if (leave) {
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.className = 'link';
+        back.textContent = leave;
+        back.addEventListener('click', () => done(null));
+        menu.append(back);
+      }
+    });
+  }
+
+  // One visit: the player picks a game and plays it. Resolves to
+  // { stars, kind }, or { left: true } if they went back without playing.
+  // The card stays open afterwards, for offer() and then close().
+  async function visit({ title }) {
     root.hidden = false;
     if (!disk) setup();
     resize();
@@ -623,70 +660,58 @@ export function createChamber({ sound } = {}) {
     player = null;
     lesson = null;
     action = null;
-    if (visits++ === 0) kinds = FIRST_VISIT;
-    else {
-      const games = shuffled(ACTION_GAMES, Math.random).filter((game) => game !== lastAction);
-      kinds = [games[0], shuffled(QUIZZES, Math.random)[0]];
-    }
-    // The address can ask for a game or a quiz (?game=golf&quiz=square), for
-    // demos and testing.
-    const asked = new URLSearchParams(window.location.search);
-    if (ACTION_GAMES.includes(asked.get('game'))) kinds = [asked.get('game'), kinds[1]];
-    if (QUIZZES.includes(asked.get('quiz'))) kinds = [kinds[0], asked.get('quiz')];
-    lastAction = kinds[0];
-    let score = 0;
-    $('chamber-title').textContent = title;
-    skipButton.hidden = !skippable;
-    const skipped = new Promise((resolve) => (skipButton.onclick = () => resolve(SKIP)));
-    const unlessSkipped = (step) =>
-      Promise.race([step, skipped]).then((value) => {
-        if (value === SKIP) throw SKIP;
-        return value;
-      });
-
-    try {
-      for (let index = 0; index < ROUNDS; index++) {
-        result.textContent = '';
-        roundText.textContent = `Round ${index + 1} of ${ROUNDS}`;
-        if (ACTION_GAMES.includes(kinds[index])) {
-          score += await unlessSkipped(playAction(kinds[index]));
-          await unlessSkipped(wait(2200));
-        } else {
-          await unlessSkipped(startRound(index));
-          const pick = await unlessSkipped(choose());
-          sound?.pick();
-          if (await unlessSkipped(showAnswer(pick))) score++;
-          await unlessSkipped(wait(500));
-          await unlessSkipped(walkToAnswer());
-        }
-        if (index < ROUNDS - 1) await unlessSkipped(spin());
-      }
-    } catch (error) {
-      if (error !== SKIP) throw error;
-      action?.stop();
-      action = null;
-      onPick = null;
-      animation = null;
-      skipButton.hidden = true;
-      root.hidden = true;
-      return { score: 0, skipped: true };
-    }
-
-    skipButton.hidden = true;
-    roundText.textContent = `${'★'.repeat(score)}${'☆'.repeat(BEST - score)}`;
-    if (round?.kind === 'closest') {
-      prompt.textContent = '';
-      prompt.textContent = await showLesson();
-    }
+    round = null;
+    labels.replaceChildren();
+    result.textContent = '';
     result.className = '';
-    result.textContent =
-      score === BEST
-        ? 'Perfect: three stars! Each new letter is the best of four draws.'
-        : `${score} star${score === 1 ? '' : 's'} of ${BEST}: each new letter is the best of ${score + 1} draw${score ? 's' : ''}.`;
-    await waitForButton('Collect your letters');
-    root.hidden = true;
-    return { score, skipped: false };
+    button.hidden = true;
+    $('chamber-title').textContent = title;
+    roundText.textContent = 'Win a power-up';
+
+    // The address can ask for a game or a puzzle (?game=golf, ?quiz=square),
+    // for demos and testing.
+    const asked = new URLSearchParams(window.location.search);
+    let kind = [asked.get('game'), asked.get('quiz')].find((id) => ACTION_GAMES.includes(id) || QUIZZES.includes(id));
+    if (!kind) {
+      prompt.textContent = 'Space is curved in here. Pick a game: two stars win a big prize, one star a small one.';
+      kind = await chooseFrom(GAMES, 'Back to the board');
+      if (!kind) {
+        root.hidden = true;
+        return { left: true };
+      }
+    }
+    if (kind === 'puzzle') kind = shuffled(QUIZZES, Math.random)[0];
+    roundText.textContent = GAMES.find(({ id }) => id === kind)?.name ?? 'Quick puzzle';
+
+    let stars;
+    if (ACTION_GAMES.includes(kind)) {
+      stars = await playAction(kind);
+    } else {
+      await startRound(kind);
+      const pick = await choose();
+      sound?.pick();
+      stars = (await showAnswer(pick)) ? 1 : 0;
+      await wait(500);
+      await walkToAnswer();
+      if (kind === 'closest') prompt.textContent = await showLesson();
+    }
+    return { stars, kind };
   }
 
-  return { play, isOpen: () => !root.hidden };
+  // After a win: the player picks one of the prizes on offer. prizes:
+  // [{ id, name, text, mark }]. Resolves to the id chosen.
+  async function offer(prizes) {
+    await wait(900);
+    labels.replaceChildren();
+    prompt.textContent = 'You won a power-up! Pick one.';
+    return chooseFrom(prizes);
+  }
+
+  // After a loss: a moment to read what happened, then back to the board.
+  async function close(text = null) {
+    if (text) await waitForButton(text);
+    root.hidden = true;
+  }
+
+  return { visit, offer, close, isOpen: () => !root.hidden };
 }

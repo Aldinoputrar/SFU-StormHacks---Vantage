@@ -7,9 +7,13 @@ function rackTile(letter, index) {
   button.type = 'button';
   button.className = 'tile';
   button.dataset.index = index;
-  button.textContent = letter;
+  // A wild tile shows a star and no value.
+  const wild = !(letter in LETTER_VALUES);
+  button.textContent = wild ? '★' : letter;
+  button.classList.toggle('wild', wild);
+  if (wild) button.setAttribute('aria-label', 'Wild tile: any letter');
   const value = document.createElement('sub');
-  value.textContent = LETTER_VALUES[letter];
+  value.textContent = wild ? '' : LETTER_VALUES[letter];
   button.append(value);
   return button;
 }

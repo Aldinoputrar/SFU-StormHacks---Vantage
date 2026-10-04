@@ -40,8 +40,8 @@ export function forgetTextures() {
   for (const texture of textures.values()) texture.dispose();
   textures.clear();
 }
-function faceTexture(style, letter, bonus, stone) {
-  const key = `${style}:${letter}:${bonus ?? ''}:${style === 'empty' ? stone : ''}`;
+function faceTexture(style, letter, bonus, stone, wild = false) {
+  const key = `${style}:${letter}:${bonus ?? ''}:${style === 'empty' ? stone : ''}:${wild ? 'wild' : ''}`;
   if (textures.has(key)) return textures.get(key);
 
   const size = 256;
@@ -74,7 +74,8 @@ function faceTexture(style, letter, bonus, stone) {
     ctx.font = `700 156px ${FONT}`;
     ctx.fillText(letter, size / 2, size / 2 + 18);
     ctx.font = `700 46px ${FONT}`;
-    ctx.fillText(String(LETTER_VALUES[letter] ?? ''), size - 42, size - 34);
+    // A wild tile scores nothing, so it shows a star where its value would be.
+    ctx.fillText(wild ? '★' : String(LETTER_VALUES[letter] ?? ''), size - 42, size - 34);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -131,7 +132,7 @@ export class BoardView {
       const materials = [null, null, face, null, null, null];
       const mesh = new THREE.Mesh(tileGeometry, materials);
       mesh.userData.slot = slot.key;
-      const tile = { slot, mesh, face, materials, style: null, letter: null, right: null };
+      const tile = { slot, mesh, face, materials, style: null, letter: null, wild: false, right: null };
       this.tiles.set(slot.key, tile);
       this.setTile(slot.key, '', 'empty');
       this.orient(tile, vec(slot.axes[0]));
@@ -155,13 +156,14 @@ export class BoardView {
     this.highlights = new Map();
   }
 
-  setTile(key, letter, style) {
+  setTile(key, letter, style, wild = false) {
     const tile = this.tiles.get(key);
-    if (tile.style === style && tile.letter === letter) return;
+    if (tile.style === style && tile.letter === letter && tile.wild === wild) return;
     tile.style = style;
     tile.letter = letter;
+    tile.wild = wild;
     const stone = this.stoneOf(tile.slot.cell);
-    tile.face.map = faceTexture(style, letter, style === 'empty' ? this.bonuses.get(key) : null, stone);
+    tile.face.map = faceTexture(style, letter, style === 'empty' ? this.bonuses.get(key) : null, stone, wild);
     tile.face.needsUpdate = true;
     for (const i of [0, 1, 3, 4, 5]) tile.materials[i] = sideMaterial(style, stone);
 
@@ -201,9 +203,9 @@ export class BoardView {
   // Draws every tile's face again (see forgetTextures).
   redraw() {
     for (const [key, tile] of this.tiles) {
-      const { letter, style } = tile;
+      const { letter, style, wild } = tile;
       tile.style = null;
-      this.setTile(key, letter, style);
+      this.setTile(key, letter, style, wild);
       if (style === 'pending') this.pops.delete(key);
     }
   }

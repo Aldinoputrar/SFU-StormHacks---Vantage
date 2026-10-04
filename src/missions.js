@@ -16,7 +16,7 @@ export const MISSIONS = [
   },
   { id: 'long', text: 'Play a word of six letters or more', word: (turn) => turn.word.length >= 6 },
   { id: 'rare', text: 'Play a J, Q, X or Z', word: (turn) => turn.placed.some(({ letter }) => 'JQXZ'.includes(letter)) },
-  { id: 'chamber', text: 'Earn all three stars in one chamber visit', chamber: (score) => score === 3 },
+  { id: 'chamber', text: 'Win a two-star prize in the chamber', chamber: (stars) => stars >= 2 },
 ];
 
 // Crossing the gap is the heart of the game, so it is always one of the three.

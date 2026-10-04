@@ -608,7 +608,8 @@ kbd {
   align-items: center;
   gap: 12px;
   width: max-content;
-  max-width: calc(100vw - 32px);
+  /* Narrow enough that the rack and the buttons sit in two tidy rows. */
+  max-width: min(720px, calc(100vw - 32px));
   padding: 10px 14px;
   border-radius: 18px;
 }
@@ -1210,9 +1211,43 @@ body.intro #players {
   color: #ffffff;
 }
 
-#chamber-skip {
-  display: block;
-  margin: 8px auto 0;
+/* The chamber's menu: games to pick, then prizes to pick. */
+#chamber-menu {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.choice-card {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  text-align: left;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.choice-card strong {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.choice-card span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.choice-card:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+#chamber-menu .link {
+  grid-column: 1 / -1;
+  justify-self: center;
+  margin-top: 4px;
 }
 
 /* ---------- The Hyperbolic Lab ---------- */
@@ -1635,4 +1670,39 @@ body.intro #players {
   #score.bump {
     animation-duration: 0.01s;
   }
+}
+
+/* Power-ups in play: the wild tile, the armed double, the letter picker. */
+#rack .tile.wild {
+  background: linear-gradient(180deg, #fff6d8, #ffd978);
+  border-color: #e0b24a;
+  color: #b7791f;
+}
+
+#chamber-open {
+  border-color: #d8c7ef;
+  color: #6b4fb3;
+}
+
+#boost[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+#wild-picker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  max-width: 380px;
+  pointer-events: auto;
+}
+
+#wild-picker button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 12px;
 }

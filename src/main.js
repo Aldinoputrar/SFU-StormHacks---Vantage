@@ -11,7 +11,7 @@ import { createChamber } from './chamber.js';
 import { createConfetti } from './confetti.js';
 import { createDictionary, createWordChecker } from './dictionary.js';
 import {
-  RACK_SIZE,
+  WILD,
   cancelPending,
   commitPlay,
   createGame,
@@ -35,6 +35,7 @@ import { saveScores, topScores } from './leaderboard.js';
 import { MAPS, MONUMENT, VIEWS } from './level.js';
 import { MISSION_POINTS, completeMissions, pickMissions } from './missions.js';
 import { openRoom } from './online.js';
+import { HINTS, POWERS, grant, prizeChoices } from './powers.js';
 import { MAX_PLAYERS, createPlayers, seat, standings, turnsFor } from './players.js';
 import { placementDirection, placementOptions } from './placement.js';
 import { BoardView, forgetTextures } from './scene.js';
@@ -85,7 +86,6 @@ const confetti = createConfetti(document.getElementById('confetti'));
 const sound = createSound();
 const chamber = createChamber({ sound });
 const lab = createLab({ sound });
-const chamberStats = { right: 0, rounds: 0 };
 // The offline word list, fetched once when first needed: for checking words
 // when Merriam-Webster cannot be reached, and for hints.
 let wordList = null;
@@ -102,7 +102,6 @@ const loadWordList = () =>
     }));
 // Merriam-Webster first; the offline list only loads if it is needed.
 const words = createWordChecker({ loadOffline: () => loadWordList().then(({ isWord }) => isWord) });
-const HINTS = 3; // per player, per run
 
 // Transparent, so the page's pastel sky shows through.
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -120,7 +119,11 @@ fill.position.set(-6, -12, -8);
 scene.add(fill);
 
 let view = new BoardView(board, scene, game.bonuses);
-for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed');
+// Draws every letter on the board; wild tiles show no value.
+const drawLetters = () => {
+  for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed', game.wilds.has(key));
+};
+drawLetters();
 
 // Tiles are drawn with the display font; once it has loaded, draw them again.
 document.fonts
@@ -312,7 +315,7 @@ function renderHud() {
     headline = 'Behind the illusion';
     hint = 'The dashed lines show how far apart the joined strips really are';
   } else if (mode === 'chamber') {
-    headline = 'Earning letters in the Hyperbolic Chamber';
+    headline = 'In the Hyperbolic Chamber';
   } else if (mode === 'over') {
     const played = game.history.filter((turn) => turn.type === 'word');
     const best = played.reduce((top, turn) => (turn.points.total > (top?.points.total ?? -1) ? turn : top), null);
@@ -403,6 +406,18 @@ function renderHud() {
   document.getElementById('lab-open').disabled = !canLook();
   document.getElementById('swing').hidden = !LEVEL.bridge;
   const hints = players[loaded()].hints ?? HINTS;
+  const me = players[loaded()];
+  const chamberButton = document.getElementById('chamber-open');
+  chamberButton.disabled = busy() || !myTurn() || mode !== 'explore' || Boolean(me.visited);
+  chamberButton.textContent = me.visited ? 'Chamber (next turn)' : 'Chamber ★';
+  chamberButton.classList.toggle('nudge', !chamberButton.disabled && game.history.length === 1 && !(me.won > 0));
+  const boostButton = document.getElementById('boost');
+  boostButton.hidden = !(me.powers?.double > 0);
+  boostButton.textContent = game.boost > 1 ? '×2 armed' : `×2 (${me.powers?.double ?? 0})`;
+  boostButton.setAttribute('aria-pressed', String(game.boost > 1));
+  boostButton.disabled = busy() || !myTurn();
+  document.getElementById('swap').textContent = me.powers?.swap > 0 ? `Swap (free ×${me.powers.swap})` : 'Swap';
+  wildPicker.hidden = !(pickingWild && mode === 'placing');
   const hintButton = document.getElementById('hint-button');
   hintButton.textContent = `Hint (${hints})`;
   hintButton.disabled = busy() || !myTurn() || !hints || (mode !== 'explore' && mode !== 'placing');
@@ -504,35 +519,68 @@ controls.addEventListener('end', () => {
   if (dragged && mode === 'explore') snapIfNear();
 });
 
-// The Hyperbolic Chamber fills the rack: the better the score there, the
-// better the letters (each new tile is the best of score + 1 draws).
-// After the first visit the chamber can be skipped, for a plain draw.
-async function earnLetters(title) {
-  if (!game.bag.length || game.rack.length >= RACK_SIZE) return;
-  mode = 'chamber';
-  controls.enabled = false;
-  renderHud();
-  // ?skip in the address offers the skip from the very first visit, for demos.
-  const skippable = chamberStats.rounds > 0 || new URLSearchParams(window.location.search).has('skip');
-  const { score, skipped } = await chamber.play({ title, skippable });
-  if (!skipped) {
-    chamberStats.right += score;
-    chamberStats.rounds += 3;
-    rewardMissions(completeMissions(game.missions, { chamber: score }));
-  }
-  const drawn = refillRack(game, score + 1);
+// Fills the seated player's rack from the bag, as a turn begins. Each tile
+// is the better of two draws, so racks stay playable. A new turn also lets
+// the player visit the chamber again.
+function dealLetters({ newTurn = true } = {}) {
+  if (newTurn) players[loaded()].visited = false;
+  const first = !game.history.length;
+  const drawn = refillRack(game, 2);
   mode = isOver(game) ? 'over' : 'explore';
   controls.enabled = true;
-  const first = !game.history.length;
-  setMessage(
-    first
-      ? `New letters: ${drawn.join(' ')}. Now press “Isometric view” at the top left.`
-      : `New letters: ${drawn.join(' ')}`,
-    'success',
-    first ? 12000 : 5000,
-  );
+  if (drawn.length) {
+    setMessage(
+      first
+        ? `Your letters: ${drawn.join(' ')}. Now press “Isometric view” at the top left.`
+        : `New letters: ${drawn.join(' ')}`,
+      'success',
+      first ? 12000 : 5000,
+    );
+  }
   refresh();
 }
+
+// The Hyperbolic Chamber: once a turn, if they like, the player picks a game
+// in curved space; winning it offers a choice of power-ups.
+async function visitChamber() {
+  const player = players[loaded()];
+  if (mode !== 'explore' || busy() || !myTurn() || player.visited) return;
+  mode = 'chamber';
+  controls.enabled = false;
+  setHover(null);
+  renderHud();
+  const { stars, left } = await chamber.visit({ title: 'The Hyperbolic Chamber' });
+  let won = null;
+  if (!left) {
+    player.visited = true;
+    rewardMissions(completeMissions(game.missions, { chamber: stars }));
+    const choices = prizeChoices(stars);
+    if (choices.length) {
+      won = await chamber.offer(choices.map((id) => ({ id, ...POWERS[id] })));
+      grant(game, player, won);
+      await chamber.close();
+    } else {
+      await chamber.close('Back to the board');
+    }
+  }
+  mode = 'explore';
+  controls.enabled = true;
+  if (won) {
+    sound.right();
+    confetti.burst(window.innerWidth / 2, window.innerHeight * 0.45, 70);
+    setMessage(`You won: ${POWERS[won].name}. ${POWERS[won].text}`, 'success', 10000);
+  }
+  refresh();
+}
+document.getElementById('chamber-open').addEventListener('click', visitChamber);
+
+// The double-score token: armed before a word, used up when it is played.
+document.getElementById('boost').addEventListener('click', () => {
+  const powers = players[loaded()].powers;
+  if (busy() || !myTurn() || !(powers?.double > 0)) return;
+  game.boost = game.boost > 1 ? 1 : 2;
+  renderHud();
+});
 
 // Swings the camera away from the vantage point and back, with dashed lines
 // across every hidden gap, so the player sees the strips come apart.
@@ -608,6 +656,7 @@ function lockView(key) {
 
 function exitPlacing() {
   if (mode !== 'placing' || busy()) return;
+  pickingWild = false;
   for (const key of cancelPending(game)) view.setTile(key, '', 'empty');
   selection = null;
   lockedDir = null;
@@ -664,17 +713,22 @@ function nextEmpty(from) {
   return -1;
 }
 
-function placeFromRack(index) {
+function placeFromRack(index, as = null) {
   if (mode === 'over' || busy()) return;
   if (mode !== 'placing' || !selection) {
     setMessage('Click a tile first to choose where your word goes.', 'error');
+    return;
+  }
+  if (game.rack[index] === WILD && !as) {
+    pickingWild = true;
+    setMessage('Type or tap the letter your wild tile should be.', 'info', 0);
     return;
   }
   const at = nextEmpty(selection.cursor);
   if (at === -1) {
     // Up against a letter or the end of the line: this turn's tiles slide
     // back a square to make room, so the word ends where it was started.
-    if (!selection.chain.cyclic && placeTileBehind(game, selection.chain.slots, index)) {
+    if (!selection.chain.cyclic && placeTileBehind(game, selection.chain.slots, index, as)) {
       sound.place(game.pending.length - 1);
       showPending(selection.chain);
       refresh();
@@ -684,10 +738,10 @@ function placeFromRack(index) {
     return;
   }
   const key = selection.chain.slots[at];
-  const letter = game.rack[index];
-  if (!placeTile(game, key, index)) return;
+  const letter = as ?? game.rack[index];
+  if (!placeTile(game, key, index, as)) return;
   sound.place(game.pending.length - 1);
-  view.setTile(key, letter, 'pending');
+  view.setTile(key, letter, 'pending', Boolean(as));
   const next = nextEmpty(at + 1);
   selection.cursor = next === -1 ? selection.chain.slots.length : next;
   refresh();
@@ -697,7 +751,7 @@ function placeFromRack(index) {
 function showPending(chain) {
   for (const key of chain.slots) {
     const tile = game.pending.find(({ slot }) => slot === key);
-    if (tile) view.setTile(key, tile.letter, 'pending');
+    if (tile) view.setTile(key, tile.letter, 'pending', tile.wild);
     else if (!game.letters.has(key)) view.setTile(key, '', 'empty');
   }
 }
@@ -730,7 +784,7 @@ async function hint() {
   const fits = current.chains
     .filter((chain) => !chain.cyclic && chain.slots.length >= 2)
     .flatMap((chain) =>
-      findFits(chain.slots.map((key) => letterAt(game, key)), game.rack, dictionary.list, chain.slotLines)
+      findFits(chain.slots.map((key) => letterAt(game, key)), game.rack.filter((letter) => letter !== WILD), dictionary.list, chain.slotLines)
         .slice(0, 6)
         .map((fit) => ({ ...fit, chain })),
     )
@@ -764,11 +818,35 @@ async function hint() {
 }
 document.getElementById('hint-button').addEventListener('click', hint);
 
+// Typing a letter plays it from the rack; a letter the rack lacks uses the
+// wild tile, if there is one. After tapping the wild tile itself, the next
+// letter typed (or picked) is what it stands for.
 function typeLetter(letter) {
+  const wild = game.rack.indexOf(WILD);
+  if (pickingWild && wild !== -1) {
+    pickingWild = false;
+    placeFromRack(wild, letter);
+    return;
+  }
   const index = game.rack.indexOf(letter);
-  if (index === -1 && mode === 'placing') setMessage(`There's no ${letter} in your rack.`, 'error');
+  if (index !== -1) placeFromRack(index);
+  else if (wild !== -1 && mode === 'placing' && selection) placeFromRack(wild, letter);
+  else if (mode === 'placing') setMessage(`There's no ${letter} in your rack.`, 'error');
   else placeFromRack(index);
 }
+
+// The letters a wild tile can be, to tap when there is no keyboard.
+let pickingWild = false;
+const wildPicker = document.getElementById('wild-picker');
+wildPicker.replaceChildren(
+  ...[...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map((letter) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = letter;
+    button.addEventListener('click', () => typeLetter(letter));
+    return button;
+  }),
+);
 
 function undo() {
   if (mode !== 'placing' || busy()) return;
@@ -810,7 +888,8 @@ async function play() {
 
   const { word, placed, points } = commitPlay(game, prepared);
   game.history.at(-1).player = players[seated].name;
-  for (const tile of placed) view.setTile(tile.slot, tile.letter, 'fixed');
+  for (const tile of placed) view.setTile(tile.slot, tile.letter, 'fixed', tile.wild);
+  if (points.boost > 1) players[loaded()].powers.double--;
   const sources = [...new Set(results.map((result) => result.source))].join(' + ');
   setMessage(`${word}: ${describePoints(points)} · checked with ${sources}`, 'success', 7000);
   exitPlacing();
@@ -824,7 +903,7 @@ async function play() {
   celebrating = false;
   refresh();
   if (mode === 'over') shareState(lastWord(prepared, points));
-  else await endTurn('Earn letters for your next word', lastWord(prepared, points));
+  else await endTurn(lastWord(prepared, points));
 }
 
 // What other devices need to celebrate a word played on this one.
@@ -847,6 +926,7 @@ function celebrate(prepared, points) {
   const details = [];
   if (crossed) details.push(`Across the illusion ×${points.surfaces}`);
   if (points.bingo) details.push('All seven tiles +50');
+  if (points.boost > 1) details.push('Double score ×2');
   showPopup(`+${points.total}`, details, points.total >= 40);
   if (crossed || points.total >= 40) confetti.burst(window.innerWidth / 2, window.innerHeight * 0.4, crossed ? 90 : 60);
 }
@@ -925,7 +1005,7 @@ function stepSwing(now) {
   swinging = null;
   view.dispose();
   view = new BoardView(board, scene, game.bonuses);
-  for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed');
+  drawLetters();
   visibleCache = { key: '', view: null };
   if (!board.slots.has(traveller.slot?.key)) traveller.standOn(startSlot());
   else traveller.standOn(board.slots.get(traveller.slot.key));
@@ -947,36 +1027,46 @@ function stepSwing(now) {
   refresh();
 }
 
-function describePoints({ letters, wordMultiplier, surfaces, cross, bingo, bonuses, total }) {
+function describePoints({ letters, wordMultiplier, surfaces, cross, bingo, bonuses, boost, total }) {
   let sum = `${letters}`;
   if (wordMultiplier > 1) sum += ` × ${wordMultiplier} word bonus`;
   if (surfaces > 1) sum += ` × ${surfaces} surfaces`;
   for (const word of cross) sum += ` + ${word.word} ${word.total}`;
   if (bingo) sum += ` + ${bingo} for using all seven tiles`;
+  if (boost > 1) sum = `(${sum}) × ${boost} double score`;
   const found = bonuses.length ? ` (${bonuses.map((kind) => BONUS_KINDS[kind].name).join(', ')})` : '';
   return sum === String(total) ? `${total} points${found}` : `${sum} = ${total} points${found}`;
 }
 
 async function swap() {
-  if (mode !== 'explore' || busy() || !myTurn() || !swapRack(game)) return;
+  if (mode !== 'explore' || busy() || !myTurn()) return;
+  // A free-swap token keeps the turn: new letters, and play on.
+  const powers = players[loaded()].powers;
+  const free = powers?.swap > 0;
+  if (!swapRack(game, { free })) return;
+  if (free) {
+    powers.swap--;
+    dealLetters({ newTurn: false });
+    return;
+  }
   if (isOver(game)) {
     mode = 'over';
     refresh();
     return;
   }
-  await endTurn('Earn new letters');
+  await endTurn();
 }
 
 // After a word or a swap: with more than one player, the next one takes the
-// seat and the screen is passed to them; then whoever is seated tops up
-// their letters in the chamber.
-async function endTurn(title, last = null) {
+// seat and the screen is passed to them; then whoever is seated is dealt
+// letters for their turn.
+async function endTurn(last = null) {
   if (online) {
     // Online: pass the turn on, send the game to everyone, and wait.
     syncSeat();
     seated = nextSeat(seated);
     shareState(last);
-    if (seated === online.me) await earnLetters(title);
+    if (seated === online.me) dealLetters();
     else refresh();
     return;
   }
@@ -989,9 +1079,8 @@ async function endTurn(title, last = null) {
       return;
     }
     await handoff(players[seated]);
-    title = game.rack.length ? title : 'Earn your first letters';
   }
-  await earnLetters(players.length > 1 ? `${players[seated].name}: ${title.toLowerCase()}` : title);
+  dealLetters();
 }
 
 // The card between turns, so the next player's letters stay hidden until
@@ -1030,7 +1119,16 @@ function shareState(last = null) {
   syncSeat();
   online.room.sendState({
     game: snapshot(game),
-    players: players.map(({ name, rack, score, missions, hints, gone }) => ({ name, rack, score, missions, hints, gone })),
+    players: players.map(({ name, rack, score, missions, hints, gone, powers, won }) => ({
+      name,
+      rack,
+      score,
+      missions,
+      hints,
+      gone,
+      powers,
+      won,
+    })),
     seated,
     last,
     over: mode === 'over' || isOver(game),
@@ -1050,7 +1148,7 @@ function applyState(data) {
     view = new BoardView(board, scene, game.bonuses);
     visibleCache = { key: '', view: null };
   }
-  for (const [key, letter] of game.letters) view.setTile(key, letter, 'fixed');
+  drawLetters();
   traveller.standOn(board.slots.get(traveller.slot?.key) ?? startSlot());
   renderMissions();
   if (data.last) {
@@ -1070,8 +1168,8 @@ function applyState(data) {
   if (seated === online.me) {
     setMessage('Your turn!', 'success');
     refresh();
-    // Let the last word's celebration play before the chamber opens.
-    setTimeout(() => mode === 'explore' && earnLetters('Your turn: earn your letters'), data.last ? 2200 : 600);
+    // Let the last word's celebration play before the letters are dealt.
+    setTimeout(() => mode === 'explore' && dealLetters(), data.last ? 2200 : 600);
   } else {
     refresh();
   }
@@ -1232,7 +1330,7 @@ function showSummary() {
   const stats = [
     ['Words', played.length],
     ['Across the illusion', joined],
-    ['Crystals found', chamberStats.rounds ? `${chamberStats.right} of ${chamberStats.rounds}` : '—'],
+    ['Power-ups won', players.reduce((sum, player) => sum + (player.won ?? 0), 0)],
   ];
   document.getElementById('summary-stats').replaceChildren(
     ...stats.map(([label, value]) => {
@@ -1442,7 +1540,7 @@ const roomHandlers = {
     if (online.room.host && seated === seatIndex && mode !== 'over') {
       seated = nextSeat(seatIndex);
       shareState();
-      if (seated === online.me) earnLetters('Your turn: earn your letters');
+      if (seated === online.me) dealLetters();
     }
     refresh();
   },
@@ -1505,7 +1603,7 @@ function beginOnline(config, seatIndex) {
   document.body.classList.remove('intro');
   mode = 'explore';
   animateTo(OVERHEAD, () => {
-    if (myTurn()) earnLetters('You go first: earn your letters');
+    if (myTurn()) dealLetters();
     else setMessage(`${players[0].name} goes first.`, 'info', 8000);
   });
 }
@@ -1526,8 +1624,7 @@ document.getElementById('intro-play').addEventListener('click', () => {
   document.getElementById('intro').hidden = true;
   document.body.classList.remove('intro');
   mode = 'explore';
-  const title = players.length > 1 ? `${players[0].name}: earn your first letters` : 'Earn your first letters';
-  animateTo(OVERHEAD, () => earnLetters(title));
+  animateTo(OVERHEAD, () => dealLetters());
 });
 
 const muteButton = document.getElementById('mute');
@@ -1576,6 +1673,7 @@ if (import.meta.env.DEV) {
       return { x: ((point.x + 1) / 2) * window.innerWidth, y: ((1 - point.y) / 2) * window.innerHeight };
     },
     mode: () => mode,
+    me: () => players[loaded()],
     online: () => online && { code: online.room.code, me: online.me, seated, players: players.map(({ name, score }) => `${name}:${score}`) },
     lookFrom: (dir) => animateTo(dir),
   };

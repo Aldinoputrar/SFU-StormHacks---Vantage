@@ -18,8 +18,9 @@ import {
 
 // The chamber's action games, each a short burst on the hyperbolic floor that
 // scores 0 to 2 stars:
-//   dash    walk about for 20 seconds collecting crystals.
-//   swarm   survive 20 seconds while shadows chase you.
+//   dash    run about for 15 seconds collecting crystals; quick catches
+//           build a combo, and gold crystals are worth three.
+//   swarm   survive 15 seconds while shadows chase you.
 //   golf    putt a ball along a true straight line, which curves on screen,
 //           into the hole in three shots.
 //   bounce  fire a shot that bounces off the walls to reach the target.
@@ -34,8 +35,9 @@ import {
 export const ACTION_GAMES = ['dash', 'swarm', 'golf', 'bounce'];
 
 const PLAYER_RADIUS = 0.16;
-const WALK_SPEED = 1.6;
-const GAME_S = 20;
+const WALK_SPEED = 2.2;
+const GAME_S = 15;
+const COMBO_S = 2.2; // catch another crystal this soon and the combo grows
 const CRYSTAL_COLORS = ['#f2777a', '#35b394', '#8c70d8', '#f4b942', '#1fbfae'];
 const KEYS = {
   ArrowUp: Math.PI / 2,
@@ -120,61 +122,94 @@ function settle() {
   return { done, finish };
 }
 
-// Crystal dash: grab as many crystals as you can in twenty seconds. Those
-// near the rim look close but are far; the near ones are worth chasing.
+// Crystal dash: grab crystals for fifteen seconds. Those near the rim look
+// close but are far; the near ones are worth chasing. Catching one soon
+// after another builds a combo worth up to three each, and a gold crystal
+// is worth three on its own.
 function dash({ disk, sound, status, random = Math.random }) {
   const { done, finish } = settle();
   const walk = walker(disk);
   const crystals = [];
+  const floats = []; // points scored, rising and fading where they were won
   let left = GAME_S;
+  let score = 0;
   let caught = 0;
+  let combo = 0;
+  let sinceCatch = Infinity;
   let over = false;
-  const spawn = () =>
-    crystals.push({ at: around(disk, 0.9 + 2.2 * random(), random), color: CRYSTAL_COLORS[crystals.length % 5] });
-  for (let i = 0; i < 7; i++) spawn();
-  status(`Crystals: 0 · ${seconds(left)} left`);
+  const spawn = () => {
+    const gold = random() < 0.2;
+    crystals.push({
+      at: around(disk, 0.7 + 1.9 * random(), random),
+      gold,
+      color: gold ? '#f4b942' : CRYSTAL_COLORS[crystals.length % 3],
+    });
+  };
+  for (let i = 0; i < 8; i++) spawn();
+  const hud = () => status(`Score ${score}${combo > 1 ? ` · combo ×${combo}` : ''} · ${seconds(left)} left`);
+  hud();
 
   return {
-    prompt: 'Crystal dash! Walk with W A S D or hold the floor, and grab as many crystals as you can in 20 seconds. The ones near the rim are further than they look.',
+    prompt: 'Crystal dash! Run with W A S D or hold the floor. Catch crystals quickly for a combo; gold ones are worth three. The ones near the rim are further than they look.',
     pointer: walk.pointer,
     key: walk.key,
     update(dt) {
       if (over) return;
       left -= dt;
-      walk.step(dt, (move) => crystals.forEach((crystal) => (crystal.at = move(crystal.at))));
+      sinceCatch += dt;
+      if (sinceCatch > COMBO_S) combo = 0;
+      walk.step(dt, (move) => {
+        for (const crystal of crystals) crystal.at = move(crystal.at);
+        for (const float of floats) float.at = move(float.at);
+      });
       const here = disk.toWorld([0, 0]);
       for (let i = crystals.length - 1; i >= 0; i--) {
-        if (distance(here, crystals[i].at) > 0.32) continue;
-        crystals.splice(i, 1);
+        if (distance(here, crystals[i].at) > 0.36) continue;
+        const [crystal] = crystals.splice(i, 1);
+        combo = Math.min(3, combo + 1);
+        sinceCatch = 0;
         caught++;
-        sound?.place(caught);
+        const won = crystal.gold ? 3 : combo;
+        score += won;
+        floats.push({ at: crystal.at, text: `+${won}`, life: 0.8, gold: crystal.gold });
+        sound?.place(combo + (crystal.gold ? 2 : 0));
         spawn();
       }
-      status(`Crystals: ${caught} · ${seconds(left)} left`);
+      for (let i = floats.length - 1; i >= 0; i--) if ((floats[i].life -= dt) <= 0) floats.splice(i, 1);
+      hud();
       if (left <= 0) {
         over = true;
         walk.stop();
-        const stars = caught >= 8 ? 2 : caught >= 4 ? 1 : 0;
         finish({
-          stars,
-          text: `You grabbed ${caught} crystal${caught === 1 ? '' : 's'}. The ones near the rim were never as close as they looked.`,
+          // A perfect chase scores about 85; aimless running, under 10.
+          stars: score >= 32 ? 2 : score >= 14 ? 1 : 0,
+          text: `${score} points from ${caught} crystal${caught === 1 ? '' : 's'}. The ones near the rim were never as close as they looked.`,
         });
       }
     },
     markers: () => [
-      ...crystals.map(({ at, color }) => ({ at, radius: 0.16, color })),
+      ...crystals.map(({ at, color, gold }) => ({ at, radius: gold ? 0.2 : 0.16, color, style: gold ? 'star' : 'gem' })),
       { at: disk.toWorld([0, 0]), radius: PLAYER_RADIUS, color: '#ffffff', style: 'player' },
     ],
     segments: () => [],
-    draw(ctx, frame) {
+    draw(ctx, frame, pixel) {
       timerRing(ctx, frame, left);
+      ctx.textAlign = 'center';
+      ctx.font = '800 18px "Nunito Variable", system-ui, sans-serif';
+      for (const { at, text, life, gold } of floats) {
+        const [x, y] = pixel(disk.toScreen(at));
+        ctx.globalAlpha = Math.min(1, life * 2.5);
+        ctx.fillStyle = gold ? '#c98a00' : '#2f8a5b';
+        ctx.fillText(text, x, y - 26 * (1 - life / 0.8) - 10);
+      }
+      ctx.globalAlpha = 1;
     },
     stop: walk.stop,
     done,
   };
 }
 
-// Escape the swarm: survive twenty seconds while shadows close in, a little
+// Escape the swarm: survive fifteen seconds while shadows close in, a little
 // slower than you. Hyperbolic space opens up so fast that a few steps
 // sideways leave a chaser far behind.
 function swarm({ disk, sound, status, random = Math.random }) {
@@ -201,7 +236,7 @@ function swarm({ disk, sound, status, random = Math.random }) {
   };
 
   return {
-    prompt: 'Escape the swarm! Shadows are coming, a little slower than you. Walk with W A S D or hold the floor, and stay away from them for 20 seconds.',
+    prompt: 'Escape the swarm! Shadows are coming, a little slower than you. Run with W A S D or hold the floor, and stay away from them for 15 seconds.',
     pointer: walk.pointer,
     key: walk.key,
     update(dt) {
@@ -212,10 +247,10 @@ function swarm({ disk, sound, status, random = Math.random }) {
       const here = disk.toWorld([0, 0]);
       if (nextSpawn <= 0 && shadows.length < 7) {
         shadows.push(around(disk, 2.4 + 0.4 * random(), random));
-        nextSpawn = 2.2;
+        nextSpawn = 1.5;
       }
       for (let i = shadows.length - 1; i >= 0; i--) {
-        shadows[i] = stepTowards(shadows[i], here, 1.05 * dt);
+        shadows[i] = stepTowards(shadows[i], here, 1.5 * dt);
         if (distance(shadows[i], here) < 0.3) {
           shadows.splice(i, 1);
           hearts--;
