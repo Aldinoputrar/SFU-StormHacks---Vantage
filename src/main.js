@@ -17,6 +17,7 @@ import {
 import { createHud } from './hud.js';
 import { BROKEN_CUBE } from './level.js';
 import { BoardView } from './scene.js';
+import { placementDirection, placementOptions } from './placement.js';
 import { turntableCells, turntableOf } from './turntable.js';
 
 const SNAP_ANGLE = THREE.MathUtils.degToRad(10); // release this close to a vantage and the camera snaps
@@ -24,6 +25,9 @@ const HINT_ANGLE = THREE.MathUtils.degToRad(20);
 const SNAP_MS = 350;
 const TURN_MS = 500;
 const ISOMETRIC = [1, 1, 1];
+// The shallow tilt shows a little depth while keeping ledges horizontal and
+// the rise vertical, matching the useful overhead framing.
+const OVERHEAD = [0.003, 1, 0.3];
 const REVEAL_TURN = THREE.MathUtils.degToRad(40); // how far reveal swings the camera
 const REVEAL_HOLD_MS = 1200;
 
@@ -69,7 +73,7 @@ drawBoard();
 
 const bounds = new THREE.Box3();
 for (const cell of board.cells) bounds.expandByPoint(new THREE.Vector3(...cell));
-const target = bounds.getCenter(new THREE.Vector3());
+const target = bounds.getCenter(new THREE.Vector3()).add(new THREE.Vector3(-0.6, 0, 0.9));
 const viewHeight = bounds.getSize(new THREE.Vector3()).length() * 0.9;
 
 // Orthographic, so things at different depths can appear to touch.
@@ -85,14 +89,15 @@ function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 resize();
+camera.zoom = 1.28;
+camera.updateProjectionMatrix();
 window.addEventListener('resize', resize);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.copy(target);
 controls.minZoom = 0.6;
 controls.maxZoom = 4;
-// Start away from every vantage point so the player has to find them.
-camera.position.copy(target).add(new THREE.Vector3(1, 0.6, 0.3).setLength(40));
+camera.position.copy(target).add(new THREE.Vector3(...OVERHEAD).setLength(40));
 controls.update();
 
 const viewDir = () => camera.position.clone().sub(controls.target).normalize().toArray();
@@ -114,6 +119,7 @@ const hud = createHud({
   onUndo: undo,
   onCancel: exitPlacing,
   onIso: () => mode === 'explore' && !isBusy() && animateTo(ISOMETRIC),
+  onOverhead: () => mode === 'explore' && !isBusy() && animateTo(OVERHEAD),
   onReveal: reveal,
   onTurn: turn,
   onPattern: selectPatternSlot,
@@ -156,7 +162,6 @@ function refresh() {
     if (cursor) highlights.set(cursor, 'cursor');
   }
   view.setHighlights(highlights);
-  view.setFocus(selection?.chain.slots ?? []);
   renderHud();
 }
 
@@ -178,7 +183,7 @@ function renderHud() {
     const { bonuses } = game;
     headline = chain.cyclic
       ? `Endless loop of ${chain.slots.length} tiles: words can wrap around`
-      : `Line of ${chain.slots.length} tiles${surfaces > 1 ? ` across ${surfaces} surfaces` : ''}`;
+      : `${placementDirection(board, chain, lockedDir)} · ${chain.slots.length} tiles${surfaces > 1 ? ` across ${surfaces} surfaces` : ''}`;
     hint = 'Type or tap letters · Enter to play · Backspace to undo · Esc to cancel';
     pattern = chain.slots.map((key, i) => ({
       letter: letterAt(game, key),
@@ -189,7 +194,7 @@ function renderHud() {
       covered: chain.hiddenSlots?.includes(key) ?? false,
     }));
     if (chain.hiddenSlots?.length) {
-      hint = 'The full row stays playable under other blocks. Click a square above to place there.';
+      hint = 'Dashed squares are on this strip, underneath another block. Select them in the word strip.';
     }
     const reachable = chain.slots.filter((key) => !game.letters.has(key) && bonuses.has(key));
     if (reachable.length) {
@@ -216,10 +221,16 @@ function renderHud() {
   const canReveal = !busy && mode !== 'placing' && current.chains.some(isJoined);
   const canTurn = !busy && mode === 'explore';
   const canSwitch = mode === 'placing' && selection && lineOptions(selection.clicked).length > 1;
+  let switchLabel = 'Switch line';
+  if (canSwitch) {
+    const options = lineOptions(selection.clicked);
+    const next = options[(options.indexOf(selection.chain) + 1) % options.length];
+    switchLabel = `Switch to ${placementDirection(board, next, lockedDir)} (${next.slots.length} tiles)`;
+  }
   hud.render({
     game, placing: mode === 'placing', busy, canPlace: mode === 'placing' && Boolean(selection) && !busy,
     canIso: !busy && mode === 'explore', canReveal, canTurn, canSwitch,
-    headline, hint, pattern, message,
+    headline, hint, pattern, message, switchLabel,
   });
 }
 
@@ -338,15 +349,15 @@ function stepTurn(now) {
 
 function lockView(key) {
   if (mode !== 'explore' || snap || revealing || turning) return;
-  snapIfNear(() => {
-    mode = 'placing';
-    controls.enabled = false;
-    lockedDir = viewDir();
-    current = chainsForView(board, lockedDir, undefined, true);
-    selection = null;
-    if (key) selectSlot(key);
-    else refresh();
-  });
+  // Freeze the view used for this click. Snapping here can move another ledge
+  // over the picked tile and make the selected surface appear to change.
+  mode = 'placing';
+  controls.enabled = false;
+  lockedDir = viewDir();
+  current = chainsForView(board, lockedDir, undefined, true);
+  selection = null;
+  if (key) selectSlot(key);
+  else refresh();
 }
 
 function exitPlacing() {
@@ -359,12 +370,9 @@ function exitPlacing() {
   refresh();
 }
 
-// Picks a line through the slot: a joined one if there is one, then the
-// longest. Choosing the same slot again switches to its other line.
+// Prefer across at intersections; show the alternative direction explicitly.
 function lineOptions(key) {
-  return (current.bySlot.get(key) ?? [])
-    .filter((chain) => chain.slots.length >= 2)
-    .sort((a, b) => isJoined(b) - isJoined(a) || b.slots.length - a.slots.length);
+  return placementOptions(board, current, key, lockedDir ?? viewDir());
 }
 
 function selectSlot(key, toggle = false) {

@@ -38,11 +38,12 @@ function replaceTiles(element, tiles) {
   if (focused != null) element.querySelector(`[data-index="${focused}"]`)?.focus({ preventScroll: true });
 }
 
-export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal, onTurn, onPattern, onSwitchLine }) {
+export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onOverhead, onReveal, onTurn, onPattern, onSwitchLine }) {
   $('play').addEventListener('click', onPlay);
   $('undo').addEventListener('click', onUndo);
   $('cancel').addEventListener('click', onCancel);
   $('iso').addEventListener('click', onIso);
+  $('overhead').addEventListener('click', onOverhead);
   $('reveal').addEventListener('click', onReveal);
   $('turn').addEventListener('click', onTurn);
   $('switch-line').addEventListener('click', onSwitchLine);
@@ -56,7 +57,7 @@ export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal, o
   });
 
   return {
-    render({ game, placing, busy, canPlace, canIso, canReveal, canTurn, canSwitch, headline, hint, pattern, message }) {
+    render({ game, placing, busy, canPlace, canIso, canReveal, canTurn, canSwitch, headline, hint, pattern, message, switchLabel }) {
       $('score').textContent = game.score;
       $('turns').textContent = game.turnsLeft;
       $('bag').textContent = game.bag.length;
@@ -70,9 +71,11 @@ export function createHud({ onRack, onPlay, onUndo, onCancel, onIso, onReveal, o
       $('undo').disabled = !canPlace || !game.pending.length;
       $('cancel').disabled = !placing || busy;
       $('iso').disabled = !canIso;
+      $('overhead').disabled = !canIso;
       $('reveal').disabled = !canReveal;
       $('turn').disabled = !canTurn;
       $('switch-line').hidden = !canSwitch;
+      $('switch-line').textContent = switchLabel;
       $('switch-line').disabled = busy || Boolean(game.pending.length);
       $('headline').textContent = headline;
       $('hint').textContent = hint;

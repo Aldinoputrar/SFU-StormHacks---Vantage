@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import * as THREE from 'three';
-import { buildBoard, slotKey } from '../src/board.js';
+import { buildBoard, chainsForView, slotKey } from '../src/board.js';
 import { BoardView } from '../src/scene.js';
+import { placementDirection, placementOptions } from '../src/placement.js';
+import { createGame, placeTile } from '../src/game.js';
+import { normalize } from '../src/geometry.js';
 
 const previousDocument = globalThis.document;
 before(() => {
@@ -34,54 +37,48 @@ function rayAbove(x = 0) {
   return new THREE.Raycaster(new THREE.Vector3(x, 5, 0), new THREE.Vector3(0, -1, 0));
 }
 
-test('a focused line can be picked through a covering ledge, and clearing restores normal picking', () => {
+test('selecting a covered lower tile never redirects a click through the upper ledge', () => {
   const view = new BoardView(board, new THREE.Scene());
   try {
     view.group.updateMatrixWorld(true);
     assert.equal(view.pick(rayAbove()), upper);
 
-    view.setFocus([lower]);
+    view.setTile(lower, 'C', 'pending');
+    view.setHighlights(new Map([[lower, 'cursor']]));
+    view.animate(0);
     view.group.updateMatrixWorld(true);
-    assert.equal(view.pick(rayAbove()), lower);
+    assert.equal(view.pick(rayAbove()), upper);
     assert.equal(view.pick(rayAbove(2)), uncovered);
 
-    view.setFocus(null);
+    view.setHighlights(new Map());
     assert.equal(view.pick(rayAbove()), upper);
-    assert.equal(view.tiles.get(lower).overlay.visible, false);
   } finally {
     view.dispose();
   }
 });
 
-test('focused tiles keep their letters and highlights while ordinary tile materials stay solid', () => {
+test('selected letters stay on their physical tile and remain occluded by covering geometry', () => {
   const view = new BoardView(board, new THREE.Scene());
   try {
     const tile = view.tiles.get(lower);
     const side = tile.materials[0];
-    view.setFocus([lower]);
-    const overlay = tile.overlay;
-    const emptyTexture = overlay.material.map;
-    assert.equal(overlay.material.depthTest, false);
-    assert.equal(overlay.material.depthWrite, false);
-    assert.ok(overlay.renderOrder > tile.mesh.renderOrder);
+    const emptyTexture = tile.face.map;
     assert.equal(tile.face.depthTest, true);
     assert.equal(side.depthTest, true);
 
     view.setTile(lower, 'A', 'pending');
-    assert.notEqual(overlay.material.map, emptyTexture);
-    assert.equal(overlay.material.map, tile.face.map);
+    assert.notEqual(tile.face.map, emptyTexture);
     view.setHighlights(new Map([[lower, 'cursor']]));
     view.animate(0);
-    assert.ok(overlay.material.emissiveIntensity > 0);
-    assert.equal(overlay.material.emissiveIntensity, tile.face.emissiveIntensity);
+    assert.ok(tile.face.emissiveIntensity > 0);
+    view.group.traverse((object) => {
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) if (material) assert.equal(material.depthTest, true);
+    });
+    assert.ok(tile.mesh.position.y < view.tiles.get(upper).mesh.position.y);
 
     view.setHighlights(new Map());
-    view.setFocus([]);
-    assert.equal(overlay.material.emissiveIntensity, 0);
-    assert.equal(overlay.visible, false);
-    view.setFocus([lower]);
-    assert.equal(overlay.visible, true);
-    assert.equal(overlay.material.map, tile.face.map);
+    assert.equal(tile.face.emissiveIntensity, 0);
   } finally {
     view.dispose();
   }
@@ -90,7 +87,6 @@ test('focused tiles keep their letters and highlights while ordinary tile materi
 test('disposing a board releases owned resources once and preserves shared textures and sides', () => {
   const scene = new THREE.Scene();
   const view = new BoardView(board, scene);
-  view.setFocus([lower]);
   const disposals = new Map();
   for (const resource of [...view.ownedGeometries, ...view.ownedMaterials]) {
     disposals.set(resource, 0);
@@ -106,4 +102,31 @@ test('disposing a board releases owned resources once and preserves shared textu
   assert.ok(!scene.children.includes(view.group));
   assert.ok([...disposals.values()].every((count) => count === 1));
   assert.equal(sharedDisposals, 0);
+});
+
+test('clicking a horizontal ledge over a vertical strip places CHAR across the upper platform', () => {
+  const level = { seed: 1, turns: 12, words: [], blocks: [
+    { start: [0, 0, 0], dir: [0, 0, 1], length: 4 },
+    { start: [-1, 2, 0], dir: [1, 0, 0], length: 6 },
+  ] };
+  const board = buildBoard(level);
+  const sceneView = new BoardView(board, new THREE.Scene());
+  try {
+    sceneView.setHighlights(new Map([[slotKey([0, 0, 0], '+y'), 'selected']]));
+    sceneView.group.updateMatrixWorld(true);
+    const clicked = sceneView.pick(rayAbove());
+    assert.equal(clicked, slotKey([0, 2, 0], '+y'));
+    const dir = normalize([0, 1, 0.001]);
+    const options = placementOptions(board, chainsForView(board, dir, undefined, true), clicked, dir);
+    const chain = options[0];
+    assert.equal(placementDirection(board, chain, dir), 'Across →');
+    const game = createGame(level, board);
+    game.rack = [...'CHAR'];
+    const start = chain.slots.indexOf(clicked);
+    for (const key of chain.slots.slice(start, start + 4)) assert.ok(placeTile(game, key, 0));
+    assert.deepEqual(game.pending.map(({ slot }) => slot), [0, 1, 2, 3].map((x) => slotKey([x, 2, 0], '+y')));
+    assert.equal(game.pending.map(({ letter }) => letter).join(''), 'CHAR');
+  } finally {
+    sceneView.dispose();
+  }
 });

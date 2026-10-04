@@ -122,9 +122,10 @@ npm run vantages  # list the vantage points in the level
 
 ### Controls
 
-- **Drag** to orbit, **scroll** to zoom. Let go near a vantage point and the camera snaps to it; joined lines glow.
+- **Drag** to orbit, **scroll** to zoom. The game starts in an overhead view; use **Overhead view** to return to it. Let go near a vantage point and the camera snaps to it; joined lines glow.
 - **Click a tile** to lock the view and pick the line through it. Click the same tile again to switch to the other line through it.
-- **Covered squares stay in the row.** Selecting a row shows its full length through any blocks above it. Click a square in the word strip to choose where to type; dashed marks identify covered squares. Use **Switch line** to choose another row through the selected tile before placing letters.
+- **Covered squares stay in the row.** Click a square in the word strip to choose where to type; dashed marks identify squares underneath other blocks. Board clicks always select the visible surface. Letters stay on their actual platform.
+- **Choose your direction.** The heading shows Across, Down, or Diagonal before you type. Across is selected first at intersections; the switch button names the alternative direction.
 - **Type** letters (or tap your rack) to place them along the line, **Backspace** to undo, **Enter** to play, **Esc** to cancel.
 - **Reveal the trick** shows the real 3D gaps behind the lines joined at the current vantage point.
 - **Turn the ledge** spends a turn rotating the blue ledge a quarter turn about its first block. Letters on it turn with it, and the lines it joins change.
